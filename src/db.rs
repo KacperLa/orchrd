@@ -21,7 +21,7 @@ mod tests {
     #[test]
     fn conversation_history_is_retained_and_windowed() {
         let dir = tempfile::tempdir().unwrap();
-        let db = Database::open(&dir.path().join("orchard.sqlite3")).unwrap();
+        let db = Database::open(&dir.path().join("orchrd.sqlite3")).unwrap();
         db.add_conversation_message("user", "first", None, "utterance")
             .unwrap();
         db.add_conversation_message("assistant", "second", None, "reply")

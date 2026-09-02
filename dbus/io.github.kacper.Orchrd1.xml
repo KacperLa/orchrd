@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<node name="/io/github/kacper/Orchard1">
-  <interface name="io.github.kacper.Orchard1">
+<node name="/io/github/kacper/Orchrd1">
+  <interface name="io.github.kacper.Orchrd1">
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
     <method name="DispatchText"><arg name="text" type="s" direction="in"/></method>
     <method name="SpeakNext"/><method name="DismissNext"/>

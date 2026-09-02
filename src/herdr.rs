@@ -135,7 +135,7 @@ fn agent_name(id: &str) -> String {
     h.update(id);
     let suffix = format!("{:x}", h.finalize());
     format!(
-        "orchard_{}_{}",
+        "orchrd_{}_{}",
         clean.chars().take(12).collect::<String>(),
         &suffix[..6]
     )
@@ -191,7 +191,7 @@ mod tests {
     use super::*;
     #[test]
     fn stable_agent_names() {
-        assert_eq!(agent_name("orchard"), agent_name("orchard"));
+        assert_eq!(agent_name("orchrd"), agent_name("orchrd"));
         assert!(agent_name("a-long-project-id").len() <= 32)
     }
     #[test]

@@ -143,7 +143,7 @@ impl Default for Commands {
 impl Default for Herdr {
     fn default() -> Self {
         Self {
-            session: "orchard".into(),
+            session: "orchrd".into(),
             poll_interval_ms: 2_000,
         }
     }
@@ -178,7 +178,7 @@ impl Default for Summary {
     }
 }
 fn default_api_key_env() -> String {
-    "ORCHARD_API_KEY".into()
+    "ORCHRD_API_KEY".into()
 }
 fn default_intent_timeout_seconds() -> u64 {
     20
@@ -186,7 +186,7 @@ fn default_intent_timeout_seconds() -> u64 {
 
 impl Config {
     pub fn default_path() -> Result<PathBuf> {
-        Ok(ProjectDirs::from("io.github.kacper", "kacper", "orchard")
+        Ok(ProjectDirs::from("io.github.kacper", "kacper", "orchrd")
             .context("could not resolve XDG config directory")?
             .config_dir()
             .join("config.toml"))
@@ -305,11 +305,11 @@ impl Config {
     pub fn runtime_dir() -> PathBuf {
         env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(format!("/tmp/orchard-{}", unsafe { libc_getuid() })))
-            .join("orchard")
+            .unwrap_or_else(|| PathBuf::from(format!("/tmp/orchrd-{}", unsafe { libc_getuid() })))
+            .join("orchrd")
     }
     pub fn data_dir() -> Result<PathBuf> {
-        Ok(ProjectDirs::from("io.github.kacper", "kacper", "orchard")
+        Ok(ProjectDirs::from("io.github.kacper", "kacper", "orchrd")
             .context("could not resolve XDG data directory")?
             .data_dir()
             .to_path_buf())
@@ -364,7 +364,7 @@ mod tests {
     #[test]
     fn defaults_are_stable() {
         let c = Config::default();
-        assert_eq!(c.herdr.session, "orchard");
+        assert_eq!(c.herdr.session, "orchrd");
         assert_eq!(c.voice.announcement_mode, AnnouncementMode::Queued);
     }
     #[test]
@@ -377,17 +377,17 @@ mod tests {
     }
     #[test]
     fn discovers_children_and_keeps_explicit_override() {
-        let root = std::env::temp_dir().join(format!("orchard-discovery-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("orchrd-discovery-{}", uuid::Uuid::new_v4()));
         let aqeye = root.join("AQEye");
-        let orchard = root.join("orchard");
+        let orchrd = root.join("orchrd");
         fs::create_dir_all(&aqeye).unwrap();
-        fs::create_dir_all(&orchard).unwrap();
+        fs::create_dir_all(&orchrd).unwrap();
         let mut config = Config::default();
         config.discovery.roots.push(root.clone());
         config.projects.push(Project {
-            id: "orchard".into(),
-            name: "Custom Orchard".into(),
-            path: orchard,
+            id: "orchrd".into(),
+            name: "Custom Orchrd".into(),
+            path: orchrd,
             goal: "Explicit goal".into(),
         });
 
@@ -395,8 +395,8 @@ mod tests {
         assert_eq!(projects.len(), 2);
         assert!(projects.iter().any(|p| p.id == "aqeye"));
         assert_eq!(
-            projects.iter().find(|p| p.id == "orchard").unwrap().name,
-            "Custom Orchard"
+            projects.iter().find(|p| p.id == "orchrd").unwrap().name,
+            "Custom Orchrd"
         );
         fs::remove_dir_all(root).unwrap();
     }

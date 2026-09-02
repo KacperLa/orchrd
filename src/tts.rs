@@ -110,7 +110,7 @@ mod tests {
     }
     #[test]
     fn enforces_short_plain_speech() {
-        let input = "[project: orchard]\n# Options\n\n1. **Resume** the [agent](https://example.com).\n2. Start a new session.\n3. This sentence must not be spoken.";
+        let input = "[project: orchrd]\n# Options\n\n1. **Resume** the [agent](https://example.com).\n2. Start a new session.\n3. This sentence must not be spoken.";
         assert_eq!(
             concise_speech(input),
             "Options Resume the agent. Start a new session."

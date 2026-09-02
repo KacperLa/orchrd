@@ -1,20 +1,20 @@
 [package]
-name = "orchard"
+name = "orchrd"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "orchard"
+name = "orchrd"
 path = "src/lib.rs"
 
 [[bin]]
-name = "orchardd"
-path = "src/bin/orchardd.rs"
+name = "orchrdd"
+path = "src/bin/orchrdd.rs"
 
 [[bin]]
-name = "orchardctl"
-path = "src/bin/orchardctl.rs"
+name = "orchrdctl"
+path = "src/bin/orchrdctl.rs"
 
 [dependencies]
 anyhow = "1.0"

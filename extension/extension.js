@@ -11,12 +11,12 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-const BUS_NAME = 'io.github.kacper.Orchard1';
-const OBJECT_PATH = '/io/github/kacper/Orchard1';
-const IFACE = 'io.github.kacper.Orchard1';
-const HERDR_SESSION = 'orchard';
+const BUS_NAME = 'io.github.kacper.Orchrd1';
+const OBJECT_PATH = '/io/github/kacper/Orchrd1';
+const IFACE = 'io.github.kacper.Orchrd1';
+const HERDR_SESSION = 'orchrd';
 
-const OrchardProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
+const OrchrdProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
   <interface name="${IFACE}">
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
     <method name="SpeakNext"/><method name="DismissNext"/>
@@ -31,19 +31,19 @@ const OrchardProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
   </interface>
 </node>`);
 
-const OrchardIndicator = GObject.registerClass(
-class OrchardIndicator extends PanelMenu.Button {
+const OrchrdIndicator = GObject.registerClass(
+class OrchrdIndicator extends PanelMenu.Button {
     _init(extension) {
-        super._init(0.5, 'Orchard');
+        super._init(0.5, 'Orchrd');
         this._extension = extension;
-        const iconFile = extension.dir.get_child('icons').get_child('orchard-symbolic.svg');
+        const iconFile = extension.dir.get_child('icons').get_child('orchrd-symbolic.svg');
         this._icon = new St.Icon({
             gicon: new Gio.FileIcon({file: iconFile}),
-            style_class: 'system-status-icon orchard-panel-icon',
+            style_class: 'system-status-icon orchrd-panel-icon',
         });
         this.add_child(this._icon);
 
-        this._status = new PopupMenu.PopupMenuItem('Orchard: connecting', {reactive: false});
+        this._status = new PopupMenu.PopupMenuItem('Orchrd: connecting', {reactive: false});
         this.menu.addMenuItem(this._status);
         this._agents = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._agents);
@@ -102,11 +102,11 @@ class OrchardIndicator extends PanelMenu.Button {
     }
 });
 
-export default class OrchardExtension extends Extension {
+export default class OrchrdExtension extends Extension {
     enable() {
         this.settings = this.getSettings();
         this._pressed = false;
-        this._indicator = new OrchardIndicator(this);
+        this._indicator = new OrchrdIndicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
         this._connectProxy();
 
@@ -128,7 +128,7 @@ export default class OrchardExtension extends Extension {
     }
 
     _connectProxy() {
-        this._proxy = new OrchardProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, proxy => {
+        this._proxy = new OrchrdProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, proxy => {
             if (proxy instanceof Error) {
                 this._setOffline(proxy.message);
                 return;
@@ -137,13 +137,13 @@ export default class OrchardExtension extends Extension {
             this._proxy.connectSignal('CompletionQueued', (_p, _sender, [project, speech]) => {
                 if (!this.settings.get_boolean('auto-speak'))
                     this._ding('complete');
-                Main.notify(`Orchard · ${project || 'Agent finished'}`, speech);
+                Main.notify(`Orchrd · ${project || 'Agent finished'}`, speech);
             });
             this._proxy.connectSignal('ApprovalRequired', (_p, _sender, [_id, message]) => {
                 this._ding('dialog-warning');
-                Main.notify('Orchard approval required', message);
+                Main.notify('Orchrd approval required', message);
             });
-            this._proxy.connectSignal('Error', (_p, _sender, [message]) => Main.notifyError('Orchard', message));
+            this._proxy.connectSignal('Error', (_p, _sender, [message]) => Main.notifyError('Orchrd', message));
             this._proxy.connect('notify::g-name-owner', () => {
                 if (this._proxy.g_name_owner) {
                     this._syncMode();
@@ -178,14 +178,14 @@ export default class OrchardExtension extends Extension {
         try {
             Gio.Subprocess.new([
                 '/run/current-system/sw/bin/kgx',
-                '--title=Orchard · Herdr',
+                '--title=Orchrd · Herdr',
                 '--',
                 '/etc/profiles/per-user/kacper/bin/herdr',
                 '--session',
                 HERDR_SESSION,
             ], Gio.SubprocessFlags.NONE);
         } catch (error) {
-            Main.notifyError('Orchard', `Could not open Herdr: ${error.message}`);
+            Main.notifyError('Orchrd', `Could not open Herdr: ${error.message}`);
         }
     }
 
@@ -204,7 +204,7 @@ export default class OrchardExtension extends Extension {
         const remote = this._proxy[`${method}Remote`];
         remote.call(this._proxy, ...args, (_result, error) => {
             if (error)
-                Main.notifyError('Orchard', error.message);
+                Main.notifyError('Orchrd', error.message);
         });
     }
 
@@ -217,7 +217,7 @@ export default class OrchardExtension extends Extension {
 
     _applySnapshot(json) {
         try { this._indicator.update(JSON.parse(json)); }
-        catch (error) { console.error(`Orchard snapshot: ${error}`); }
+        catch (error) { console.error(`Orchrd snapshot: ${error}`); }
     }
 
     _setOffline(message) {
@@ -225,7 +225,7 @@ export default class OrchardExtension extends Extension {
     }
 
     _ding(eventId) {
-        try { global.display.get_sound_player().play_from_theme(eventId, 'Orchard notification', null); }
-        catch (error) { console.debug(`Orchard sound unavailable: ${error}`); }
+        try { global.display.get_sound_player().play_from_theme(eventId, 'Orchrd notification', null); }
+        catch (error) { console.debug(`Orchrd sound unavailable: ${error}`); }
     }
 }

@@ -1,9 +1,9 @@
 {
-  "uuid": "orchard@kacper.local",
-  "name": "Orchard",
+  "uuid": "orchrd@kacper.local",
+  "name": "Orchrd",
   "description": "Voice control for Herdr coding agents",
   "shell-version": ["50"],
-  "settings-schema": "org.gnome.shell.extensions.orchard",
+  "settings-schema": "org.gnome.shell.extensions.orchrd",
   "version": 1
 }
 

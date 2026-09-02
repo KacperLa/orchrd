@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Persistent Pocket TTS worker for Orchard.
+"""Persistent Pocket TTS worker for Orchrd.
 
 Protocol: one JSON object per Unix-socket connection. The worker replies with one
 JSON line after accepting the operation. Playback completion is intentionally not
-part of the request lifetime so Orchard can remain responsive.
+part of the request lifetime so Orchrd can remain responsive.
 """
 import argparse
 import asyncio
@@ -126,7 +126,7 @@ async def main():
     if args.config:
         with open(args.config, "rb") as handle:
             config = tomllib.load(handle).get("tts", {})
-    runtime = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "orchard"
+    runtime = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "orchrd"
     socket = args.socket or config.get("socket") or str(runtime / "tts.sock")
     language = args.language or config.get("language", "english_2026-04")
     model_config = args.model_config or config.get("model_config")

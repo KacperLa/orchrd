@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use orchard::{DBUS_NAME, DBUS_PATH};
+use orchrd::{DBUS_NAME, DBUS_PATH};
 use zbus::Proxy;
 
 #[tokio::main]
@@ -7,7 +7,7 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("status");
     let conn = zbus::Connection::session().await?;
-    let proxy = Proxy::new(&conn, DBUS_NAME, DBUS_PATH, "io.github.kacper.Orchard1").await?;
+    let proxy = Proxy::new(&conn, DBUS_NAME, DBUS_PATH, "io.github.kacper.Orchrd1").await?;
     match command {
         "status" => {
             let snapshot: String = proxy.call("GetSnapshot", &()).await?;
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
                 .call::<_, _, ()>("DispatchText", &(text.as_str(),))
                 .await?
         }
-        _ => bail!("usage: orchardctl [status|start|stop|cancel|speak-next|dismiss-next|mode auto|mode queued|approve ID|deny ID|dispatch TEXT]"),
+        _ => bail!("usage: orchrdctl [status|start|stop|cancel|speak-next|dismiss-next|mode auto|mode queued|approve ID|deny ID|dispatch TEXT]"),
     };
     Ok(())
 }

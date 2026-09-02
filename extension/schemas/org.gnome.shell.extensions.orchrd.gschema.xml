@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="org.gnome.shell.extensions.orchard" path="/org/gnome/shell/extensions/orchard/">
+  <schema id="org.gnome.shell.extensions.orchrd" path="/org/gnome/shell/extensions/orchrd/">
     <key name="push-to-talk" type="as">
       <default>['Print']</default>
-      <summary>Hold to speak to Orchard</summary>
+      <summary>Hold to speak to Orchrd</summary>
     </key>
     <key name="speak-next" type="as">
       <default>['&lt;Ctrl&gt;&lt;Alt&gt;&lt;Shift&gt;space']</default>

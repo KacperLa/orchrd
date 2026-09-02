@@ -2,7 +2,7 @@ use crate::{
     config::{AnnouncementMode, Config, Project},
     db::{AgentSession, Database},
     herdr::{agent_states, HerdrClient},
-    intent::{is_risky, redact, IntentClient, ToolCall},
+    intent::{redact, IntentClient, ToolCall},
     tts::{concise_speech, TtsClient},
     voxtype::Voxtype,
 };
@@ -39,13 +39,6 @@ pub enum Event {
 struct Recording {
     path: PathBuf,
 }
-#[derive(Debug, Clone)]
-struct PendingApproval {
-    project_id: String,
-    instruction: String,
-    fresh: bool,
-}
-
 pub struct Controller {
     pub config: Arc<Config>,
     db: Arc<Database>,
@@ -57,14 +50,13 @@ pub struct Controller {
     state: RwLock<Snapshot>,
     recording: Mutex<Option<Recording>>,
     events: broadcast::Sender<Event>,
-    approvals: Mutex<HashMap<String, PendingApproval>>,
 }
 impl Controller {
     pub async fn new(config: Config) -> Result<Arc<Self>> {
         tokio::fs::create_dir_all(Config::runtime_dir()).await?;
         let data = Config::data_dir()?;
         tokio::fs::create_dir_all(&data).await?;
-        let db = Arc::new(Database::open(&data.join("orchard.sqlite3"))?);
+        let db = Arc::new(Database::open(&data.join("orchrd.sqlite3"))?);
         let projects = config.resolved_projects()?;
         db.sync_projects(&projects)?;
         let mode = db
@@ -107,7 +99,6 @@ impl Controller {
             }),
             recording: Mutex::new(None),
             events,
-            approvals: Mutex::new(HashMap::new()),
         });
         Ok(c)
     }
@@ -191,13 +182,28 @@ impl Controller {
         for _ in 0..self.config.conversation.max_tool_rounds {
             let turn = self.intent.next_conversation_turn(&messages).await?;
             messages.push(turn.message);
-            if turn.tool_calls.is_empty() {
-                let speech = turn.reply.context("conversation turn omitted reply")?;
-                return self.reply(&speech, "reply").await;
-            }
             for call in turn.tool_calls {
+                tracing::info!(
+                    tool = %call.name,
+                    tool_call_id = %call.id,
+                    "conversation tool call selected"
+                );
                 let result = match self.execute_tool(&call, text).await {
-                    Ok(value) => json!({"ok":true,"result":value}),
+                    Ok(value) => {
+                        tracing::info!(
+                            tool = %call.name,
+                            tool_call_id = %call.id,
+                            "conversation tool call succeeded"
+                        );
+                        if call.name == "speak" {
+                            let speech = string_arg(&value, "speech")?;
+                            return self.reply(speech, "reply").await;
+                        }
+                        if let Some(speech) = successful_action_speech(&call.name, &value) {
+                            return self.reply(&speech, "action_result").await;
+                        }
+                        json!({"ok":true,"result":value})
+                    }
                     Err(error) => {
                         let error = redact(&format!("{error:#}"));
                         tracing::warn!(
@@ -206,6 +212,9 @@ impl Controller {
                             error = %error,
                             "conversation tool call failed"
                         );
+                        if let Some(speech) = failed_action_speech(&call.name) {
+                            return self.reply(speech, "action_error").await;
+                        }
                         json!({"ok":false,"error":error})
                     }
                 };
@@ -225,6 +234,14 @@ impl Controller {
     }
     async fn execute_tool(&self, call: &ToolCall, transcript: &str) -> Result<Value> {
         match call.name.as_str() {
+            "speak" => {
+                let speech = string_arg(&call.arguments, "speech")?;
+                let kind = string_arg(&call.arguments, "kind")?;
+                if !matches!(kind, "answer" | "clarification") {
+                    bail!("speak kind must be answer or clarification")
+                }
+                Ok(json!({"speech":speech,"kind":kind}))
+            }
             "list_projects" => Ok(json!(self
                 .projects
                 .read()
@@ -268,11 +285,14 @@ impl Controller {
                     .get("fresh_session")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-                self.start_task(project_id, instruction, transcript, fresh)
+                let run_id = self
+                    .start_task(project_id, instruction, transcript, fresh)
                     .await?;
-                Ok(
-                    json!({"project_id":project_id,"state":self.state.read().await.state,"message":self.state.read().await.message}),
-                )
+                Ok(json!({
+                    "project_id":project_id,
+                    "outcome":"sent",
+                    "receipt":run_id
+                }))
             }
             "latest_result" => {
                 let project_id = string_arg(&call.arguments, "project_id")?;
@@ -305,41 +325,13 @@ impl Controller {
         }
     }
     pub async fn resolve_approval(&self, approval_id: &str, approve: bool) -> Result<()> {
-        if let Some(project_id) = approval_id.strip_prefix("agent:") {
-            return self.resolve_agent_decision(project_id, approve).await;
-        }
-        let pending = self
-            .approvals
-            .lock()
-            .await
-            .remove(approval_id)
-            .context("approval is no longer pending")?;
-        if approve {
-            self.start_task_unchecked(
-                &pending.project_id,
-                &pending.instruction,
-                "approved voice action",
-                pending.fresh,
-            )
-            .await
-        } else {
-            self.update_reconciled(Some("Action denied".into())).await;
-            Ok(())
-        }
+        let project_id = approval_id
+            .strip_prefix("agent:")
+            .context("approval did not originate from a coding agent")?;
+        self.resolve_agent_decision(project_id, approve).await
     }
     async fn resolve_project_decision(&self, project_id: &str, approve: bool) -> Result<()> {
-        let pending_id = self
-            .approvals
-            .lock()
-            .await
-            .iter()
-            .find(|(_, pending)| pending.project_id == project_id)
-            .map(|(id, _)| id.clone());
-        if let Some(id) = pending_id {
-            self.resolve_approval(&id, approve).await
-        } else {
-            self.resolve_agent_decision(project_id, approve).await
-        }
+        self.resolve_agent_decision(project_id, approve).await
     }
     async fn resolve_agent_decision(&self, project_id: &str, approve: bool) -> Result<()> {
         let session = self
@@ -406,37 +398,7 @@ impl Controller {
         instruction: &str,
         transcript: &str,
         fresh: bool,
-    ) -> Result<()> {
-        // Check both the original words and the router's normalized instruction so
-        // a model rewrite cannot accidentally remove an approval trigger.
-        if is_risky(transcript) || is_risky(instruction) {
-            let id = Uuid::new_v4().to_string();
-            self.approvals.lock().await.insert(
-                id.clone(),
-                PendingApproval {
-                    project_id: project_id.into(),
-                    instruction: instruction.into(),
-                    fresh,
-                },
-            );
-            let msg = format!("Approval required for: {instruction}. Say approve or deny.");
-            self.update("blocked", Some(msg.clone())).await;
-            let _ = self.events.send(Event::Approval {
-                id,
-                message: msg.clone(),
-            });
-            return Ok(());
-        }
-        self.start_task_unchecked(project_id, instruction, transcript, fresh)
-            .await
-    }
-    async fn start_task_unchecked(
-        &self,
-        project_id: &str,
-        instruction: &str,
-        transcript: &str,
-        fresh: bool,
-    ) -> Result<()> {
+    ) -> Result<String> {
         let project = self.project(project_id).await?;
         let session = if !fresh {
             self.db.session(project_id)?
@@ -476,7 +438,7 @@ impl Controller {
         self.set_active_project(project_id).await?;
         self.update_reconciled(Some(format!("Sent to {}", project.name)))
             .await;
-        Ok(())
+        Ok(run)
     }
     async fn open_session(&self, project_id: &str, resume: bool) -> Result<AgentSession> {
         let project = self.project(project_id).await?;
@@ -781,7 +743,7 @@ fn looks_like_terminal_chrome(text: &str) -> bool {
 }
 
 fn reliable_summary_fallback() -> String {
-    "The agent finished, but Orchard could not produce a reliable summary.".into()
+    "The agent finished, but Orchrd could not produce a reliable summary.".into()
 }
 
 fn string_arg<'a>(arguments: &'a Value, name: &str) -> Result<&'a str> {
@@ -789,6 +751,54 @@ fn string_arg<'a>(arguments: &'a Value, name: &str) -> Result<&'a str> {
         .get(name)
         .and_then(Value::as_str)
         .with_context(|| format!("tool call omitted {name}"))
+}
+
+fn successful_action_speech(tool: &str, result: &Value) -> Option<String> {
+    let project = result
+        .get("project_id")
+        .and_then(Value::as_str)
+        .unwrap_or("the project");
+    match tool {
+        "send_to_agent" => match result.get("outcome").and_then(Value::as_str) {
+            Some("sent")
+                if result
+                    .get("receipt")
+                    .and_then(Value::as_str)
+                    .is_some_and(|receipt| !receipt.is_empty()) =>
+            {
+                Some(format!("Sent to {project}."))
+            }
+            _ => None,
+        },
+        "start_session" => Some(format!("Started a new session for {project}.")),
+        "resume_session" => Some(format!("Resumed the latest session for {project}.")),
+        "respond_to_agent" => {
+            if result.get("approved").and_then(Value::as_bool) == Some(true) {
+                Some("Approved.".into())
+            } else {
+                Some("Denied.".into())
+            }
+        }
+        "cancel_agent" => Some(format!("Cancelled the current operation for {project}.")),
+        _ => None,
+    }
+}
+
+fn failed_action_speech(tool: &str) -> Option<&'static str> {
+    match tool {
+        "send_to_agent" => Some("I couldn't send that request. Check the Orchrd log for details."),
+        "start_session" => Some("I couldn't start that session. Check the Orchrd log for details."),
+        "resume_session" => {
+            Some("I couldn't resume that session. Check the Orchrd log for details.")
+        }
+        "respond_to_agent" => {
+            Some("I couldn't apply that response. Check the Orchrd log for details.")
+        }
+        "cancel_agent" => {
+            Some("I couldn't cancel that operation. Check the Orchrd log for details.")
+        }
+        _ => None,
+    }
 }
 
 fn approval_keys(terminal: &str) -> Vec<&'static str> {
@@ -889,10 +899,47 @@ mod tests {
     #[test]
     fn terminal_footer_is_not_a_valid_summary() {
         assert!(looks_like_terminal_chrome(
-            "gpt-5.6-sol medium · ~/Documents/Projects/orchard"
+            "gpt-5.6-sol medium · ~/Documents/Projects/orchrd"
         ));
         assert!(!looks_like_terminal_chrome(
             "The requested layout change is complete."
         ));
+    }
+
+    #[test]
+    fn controller_acknowledges_only_successful_action_results() {
+        assert_eq!(
+            successful_action_speech(
+                "send_to_agent",
+                &json!({
+                    "project_id":"orchrd",
+                    "outcome":"sent",
+                    "receipt":"run-123"
+                })
+            )
+            .as_deref(),
+            Some("Sent to orchrd.")
+        );
+        assert_eq!(
+            successful_action_speech(
+                "send_to_agent",
+                &json!({"project_id":"orchrd","outcome":"unknown"})
+            ),
+            None
+        );
+        assert_eq!(
+            successful_action_speech(
+                "send_to_agent",
+                &json!({"project_id":"orchrd","outcome":"sent"})
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn controller_owns_side_effect_failure_speech() {
+        assert!(failed_action_speech("send_to_agent").is_some());
+        assert!(failed_action_speech("respond_to_agent").is_some());
+        assert_eq!(failed_action_speech("read_agent"), None);
     }
 }

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use orchard::{
+use orchrd::{
     config::{AnnouncementMode, Config},
     controller::{Controller, Event},
     DBUS_NAME, DBUS_PATH,
@@ -7,11 +7,11 @@ use orchard::{
 use std::{path::PathBuf, sync::Arc};
 use zbus::{fdo, Connection, SignalContext};
 
-struct OrchardApi {
+struct OrchrdApi {
     controller: Arc<Controller>,
 }
-#[zbus::interface(name = "io.github.kacper.Orchard1")]
-impl OrchardApi {
+#[zbus::interface(name = "io.github.kacper.Orchrd1")]
+impl OrchrdApi {
     async fn start_listening(&self) -> fdo::Result<()> {
         self.controller.start_listening().await.map_err(fdo_err)
     }
@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
         .name(DBUS_NAME)?
         .serve_at(
             DBUS_PATH,
-            OrchardApi {
+            OrchrdApi {
                 controller: Arc::clone(&controller),
             },
         )?
@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
     tokio::spawn(async move { monitor.monitor().await });
     let signals = controller.subscribe();
     tokio::spawn(signal_loop(connection.clone(), signals));
-    tracing::info!("Orchard is ready");
+    tracing::info!("Orchrd is ready");
     std::future::pending::<()>().await;
     Ok(())
 }
@@ -118,17 +118,17 @@ async fn signal_loop(connection: Connection, mut events: tokio::sync::broadcast:
     while let Ok(event) = events.recv().await {
         let result = match event {
             Event::Snapshot(s) => {
-                OrchardApi::state_changed(&ctxt, &serde_json::to_string(&s).unwrap_or_default())
+                OrchrdApi::state_changed(&ctxt, &serde_json::to_string(&s).unwrap_or_default())
                     .await
             }
-            Event::Transcript(t) => OrchardApi::transcript_ready(&ctxt, &t).await,
+            Event::Transcript(t) => OrchrdApi::transcript_ready(&ctxt, &t).await,
             Event::Completion { project, speech } => {
-                OrchardApi::completion_queued(&ctxt, &project, &speech).await
+                OrchrdApi::completion_queued(&ctxt, &project, &speech).await
             }
             Event::Approval { id, message } => {
-                OrchardApi::approval_required(&ctxt, &id, &message).await
+                OrchrdApi::approval_required(&ctxt, &id, &message).await
             }
-            Event::Error(e) => OrchardApi::error(&ctxt, &e).await,
+            Event::Error(e) => OrchrdApi::error(&ctxt, &e).await,
         };
         if let Err(e) = result {
             tracing::warn!("emit D-Bus signal: {e}")
