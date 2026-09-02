@@ -1,0 +1,45 @@
+[commands]
+voxtype = "voxtype"
+herdr = "herdr"
+codex = "codex"
+
+[herdr]
+session = "orchard"
+poll_interval_ms = 2000
+
+[intent]
+base_url = "https://api.openai.com/v1"
+model = "gpt-5-mini"
+api_key_env = "ORCHARD_API_KEY"
+timeout_seconds = 20
+
+[conversation]
+# All messages remain in SQLite. Only this many recent messages are sent to the
+# conversational model on each turn; Orchard does not compact older messages.
+max_messages = 30
+max_tool_rounds = 6
+max_tool_output_chars = 6000
+
+[discovery]
+roots = ["/home/kacper/Documents/Projects"]
+
+[voice]
+announcement_mode = "queued"
+max_recording_seconds = 60
+
+[tts]
+language = "english_2026-04"
+model_config = "/home/kacper/.local/share/orchard/pocket-tts/english_2026-04.yaml"
+voice = "/home/kacper/.local/share/orchard/pocket-tts/alba.safetensors"
+quantize = true
+
+[summary]
+cloud_context = "rich"
+max_terminal_lines = 300
+include_diff = true
+
+[[projects]]
+id = "orchard"
+name = "Orchard"
+path = "/home/kacper/Documents/Projects/orchard"
+goal = "Build the voice-driven coding-agent controller"

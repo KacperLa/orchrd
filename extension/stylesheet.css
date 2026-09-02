@@ -1,0 +1,9 @@
+.system-status-icon.orchard-panel-icon {
+  icon-size: 20px;
+  padding: 0;
+  margin: 0;
+}
+
+.panel-button:active .system-status-icon {
+  color: #e01b24;
+}
