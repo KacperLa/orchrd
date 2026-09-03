@@ -27,21 +27,14 @@ impl OrchrdApi {
             .await
             .map_err(fdo_err)
     }
-    async fn speak_next(&self) -> fdo::Result<()> {
-        self.controller.speak_next().await.map_err(fdo_err)
-    }
-    async fn dismiss_next(&self) -> fdo::Result<()> {
-        self.controller.dismiss_next().await.map_err(fdo_err)
+    async fn repeat_last(&self) -> fdo::Result<()> {
+        self.controller.repeat_last().await.map_err(fdo_err)
     }
     async fn set_announcement_mode(&self, mode: &str) -> fdo::Result<()> {
         let mode = match mode {
             "auto" => AnnouncementMode::Auto,
-            "queued" => AnnouncementMode::Queued,
-            _ => {
-                return Err(fdo::Error::InvalidArgs(
-                    "mode must be auto or queued".into(),
-                ))
-            }
+            "muted" | "queued" => AnnouncementMode::Muted,
+            _ => return Err(fdo::Error::InvalidArgs("mode must be auto or muted".into())),
         };
         self.controller
             .set_announcement_mode(mode)
@@ -62,7 +55,7 @@ impl OrchrdApi {
     #[zbus(signal)]
     async fn transcript_ready(ctxt: &SignalContext<'_>, text: &str) -> zbus::Result<()>;
     #[zbus(signal)]
-    async fn completion_queued(
+    async fn completion_finished(
         ctxt: &SignalContext<'_>,
         project: &str,
         speech: &str,
@@ -123,7 +116,7 @@ async fn signal_loop(connection: Connection, mut events: tokio::sync::broadcast:
             }
             Event::Transcript(t) => OrchrdApi::transcript_ready(&ctxt, &t).await,
             Event::Completion { project, speech } => {
-                OrchrdApi::completion_queued(&ctxt, &project, &speech).await
+                OrchrdApi::completion_finished(&ctxt, &project, &speech).await
             }
             Event::Approval { id, message } => {
                 OrchrdApi::approval_required(&ctxt, &id, &message).await

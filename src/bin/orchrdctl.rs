@@ -17,12 +17,11 @@ async fn main() -> Result<()> {
         "start" => proxy.call::<_, _, ()>("StartListening", &()).await?,
         "stop" => proxy.call::<_, _, ()>("StopListening", &()).await?,
         "cancel" => proxy.call::<_, _, ()>("CancelListening", &()).await?,
-        "speak-next" => proxy.call::<_, _, ()>("SpeakNext", &()).await?,
-        "dismiss-next" => proxy.call::<_, _, ()>("DismissNext", &()).await?,
+        "repeat-last" => proxy.call::<_, _, ()>("RepeatLast", &()).await?,
         "mode" => {
             let mode = args
                 .get(1)
-                .ok_or_else(|| anyhow::anyhow!("mode requires auto or queued"))?;
+                .ok_or_else(|| anyhow::anyhow!("mode requires auto or muted"))?;
             proxy
                 .call::<_, _, ()>("SetAnnouncementMode", &(mode.as_str(),))
                 .await?
@@ -44,7 +43,7 @@ async fn main() -> Result<()> {
                 .call::<_, _, ()>("DispatchText", &(text.as_str(),))
                 .await?
         }
-        _ => bail!("usage: orchrdctl [status|start|stop|cancel|speak-next|dismiss-next|mode auto|mode queued|approve ID|deny ID|dispatch TEXT]"),
+        _ => bail!("usage: orchrdctl [status|start|stop|cancel|repeat-last|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
     };
     Ok(())
 }

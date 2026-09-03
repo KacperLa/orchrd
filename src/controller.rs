@@ -24,7 +24,6 @@ pub struct Snapshot {
     pub state: String,
     pub active_project: Option<String>,
     pub agents: Vec<AgentSession>,
-    pub pending_results: usize,
     pub announcement_mode: AnnouncementMode,
     pub message: Option<String>,
 }
@@ -64,16 +63,15 @@ impl Controller {
             .and_then(|v| {
                 if v == "auto" {
                     Some(AnnouncementMode::Auto)
-                } else if v == "queued" {
-                    Some(AnnouncementMode::Queued)
+                } else if v == "muted" || v == "queued" {
+                    Some(AnnouncementMode::Muted)
                 } else {
                     None
                 }
             })
             .unwrap_or(config.voice.announcement_mode);
         let agents = db.sessions()?;
-        let pending = db.pending_results()?.len();
-        let initial_state = reconciled_state(&agents, pending).to_owned();
+        let initial_state = reconciled_state(&agents).to_owned();
         let active_project = db.setting("active_project")?;
         let (events, _) = broadcast::channel(128);
         let c = Arc::new(Self {
@@ -93,7 +91,6 @@ impl Controller {
                 state: initial_state,
                 active_project,
                 agents,
-                pending_results: pending,
                 announcement_mode: mode,
                 message: None,
             }),
@@ -113,7 +110,6 @@ impl Controller {
         s.state = state.into();
         s.message = message;
         s.agents = self.db.sessions().unwrap_or_default();
-        s.pending_results = self.db.pending_results().map(|x| x.len()).unwrap_or(0);
         let _ = self.events.send(Event::Snapshot(s.clone()));
     }
     pub async fn start_listening(&self) -> Result<()> {
@@ -481,29 +477,20 @@ impl Controller {
             if mode == AnnouncementMode::Auto {
                 "auto"
             } else {
-                "queued"
+                "muted"
             },
         )?;
         self.state.write().await.announcement_mode = mode;
         self.update_reconciled(None).await;
         Ok(())
     }
-    pub async fn speak_next(&self) -> Result<()> {
-        let pending = self.db.pending_results()?;
-        let run = pending.first().context("no pending result")?;
-        self.tts
-            .speak(&run.id, run.result.as_deref().unwrap_or("No result"))
-            .await?;
-        self.db.mark_announced(&run.id)?;
-        self.update_reconciled(None).await;
-        Ok(())
-    }
-    pub async fn dismiss_next(&self) -> Result<()> {
-        let pending = self.db.pending_results()?;
-        let run = pending.first().context("no pending result")?;
-        self.db.mark_announced(&run.id)?;
-        self.update_reconciled(None).await;
-        Ok(())
+    pub async fn repeat_last(&self) -> Result<()> {
+        let speech = self
+            .db
+            .setting("last_spoken")?
+            .context("Orchrd has not spoken yet")?;
+        self.speak_now(&format!("repeat-{}", Uuid::new_v4()), &speech)
+            .await
     }
     async fn announce_completion(
         &self,
@@ -511,15 +498,11 @@ impl Controller {
         project_id: &str,
         speech: &str,
     ) -> Result<()> {
-        let mut announced = false;
         if self.state.read().await.announcement_mode == AnnouncementMode::Auto {
-            match self.tts.speak(run_id, speech).await {
-                Ok(()) => {
-                    self.db.mark_announced(run_id)?;
-                    announced = true;
-                }
+            match self.speak_now(run_id, speech).await {
+                Ok(()) => {}
                 Err(error) => {
-                    tracing::warn!(%error, "could not auto-speak completion; leaving it queued");
+                    tracing::warn!(%error, "could not auto-speak completion");
                 }
             }
         }
@@ -527,13 +510,14 @@ impl Controller {
             project: project_id.into(),
             speech: speech.into(),
         });
-        if announced {
-            self.update_reconciled(Some(speech.into())).await;
-        }
         Ok(())
     }
     async fn speak_now(&self, id: &str, speech: &str) -> Result<()> {
-        self.tts.speak(id, speech).await
+        self.tts.speak(id, speech).await?;
+        if let Err(error) = self.db.set_setting("last_spoken", speech) {
+            tracing::warn!(%error, "could not remember the last spoken response");
+        }
+        Ok(())
     }
     async fn reply(&self, speech: &str, kind: &str) -> Result<()> {
         let speech = concise_speech(speech);
@@ -547,12 +531,7 @@ impl Controller {
     }
     async fn update_reconciled(&self, message: Option<String>) {
         let agents = self.db.sessions().unwrap_or_default();
-        let pending = self
-            .db
-            .pending_results()
-            .map(|runs| runs.len())
-            .unwrap_or(0);
-        let state = reconciled_state(&agents, pending);
+        let state = reconciled_state(&agents);
         self.update(state, message).await;
     }
     async fn report_error(&self, e: anyhow::Error) {
@@ -696,7 +675,7 @@ impl Controller {
         let speech = concise_speech(&speech);
         let id = self
             .db
-            .finish_latest_run(project_id, "pending_announcement", &speech)?
+            .finish_latest_run(project_id, "done", &speech)?
             .context("no working run")?;
         self.db.add_conversation_message(
             "assistant",
@@ -827,13 +806,11 @@ fn approval_keys(terminal: &str) -> Vec<&'static str> {
     }
 }
 
-fn reconciled_state(agents: &[AgentSession], pending_results: usize) -> &'static str {
+fn reconciled_state(agents: &[AgentSession]) -> &'static str {
     if agents.iter().any(|agent| agent.status == "blocked") {
         "blocked"
     } else if agents.iter().any(|agent| agent.status == "working") {
         "working"
-    } else if pending_results > 0 {
-        "result_pending"
     } else if agents.iter().any(|agent| agent.status == "unknown") {
         "unknown"
     } else {
@@ -856,14 +833,13 @@ mod tests {
     }
 
     #[test]
-    fn important_agent_states_win_over_replies_and_results() {
-        assert_eq!(reconciled_state(&[session("working")], 1), "working");
+    fn reconciles_agent_states() {
+        assert_eq!(reconciled_state(&[session("working")]), "working");
         assert_eq!(
-            reconciled_state(&[session("working"), session("blocked")], 1),
+            reconciled_state(&[session("working"), session("blocked")]),
             "blocked"
         );
-        assert_eq!(reconciled_state(&[session("done")], 1), "result_pending");
-        assert_eq!(reconciled_state(&[session("done")], 0), "idle");
+        assert_eq!(reconciled_state(&[session("done")]), "idle");
     }
 
     #[test]

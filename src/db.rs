@@ -38,6 +38,21 @@ mod tests {
         assert_eq!(all.len(), 3);
         assert_eq!(all[0].content, "first");
     }
+
+    #[test]
+    fn old_pending_announcements_are_migrated_to_done() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("orchrd.sqlite3");
+        let db = Database::open(&path).unwrap();
+        db.create_run("run", "project", "request", "prompt", "")
+            .unwrap();
+        db.finish_latest_run("project", "pending_announcement", "finished")
+            .unwrap();
+        drop(db);
+
+        let db = Database::open(&path).unwrap();
+        assert_eq!(db.latest_run("project").unwrap().unwrap().status, "done");
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +106,10 @@ impl Database {
                 [],
             )?;
         }
+        conn.execute(
+            "UPDATE runs SET status='done' WHERE status='pending_announcement'",
+            [],
+        )?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -177,31 +196,6 @@ impl Database {
     pub fn latest_run(&self, project: &str) -> Result<Option<RunRecord>> {
         let conn = self.conn.lock().unwrap();
         conn.query_row("SELECT id,project_id,transcript,prompt,status,result,created_at FROM runs WHERE project_id=?1 ORDER BY created_at DESC LIMIT 1",[project],|r|Ok(RunRecord{id:r.get(0)?,project_id:r.get(1)?,transcript:r.get(2)?,prompt:r.get(3)?,status:r.get(4)?,result:r.get(5)?,created_at:r.get(6)?})).optional().map_err(Into::into)
-    }
-    pub fn pending_results(&self) -> Result<Vec<RunRecord>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt=conn.prepare("SELECT id,project_id,transcript,prompt,status,result,created_at FROM runs WHERE status='pending_announcement' ORDER BY updated_at")?;
-        let rows = stmt
-            .query_map([], |r| {
-                Ok(RunRecord {
-                    id: r.get(0)?,
-                    project_id: r.get(1)?,
-                    transcript: r.get(2)?,
-                    prompt: r.get(3)?,
-                    status: r.get(4)?,
-                    result: r.get(5)?,
-                    created_at: r.get(6)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
-    }
-    pub fn mark_announced(&self, id: &str) -> Result<()> {
-        self.conn.lock().unwrap().execute(
-            "UPDATE runs SET status='done',updated_at=?2 WHERE id=?1",
-            params![id, Utc::now().to_rfc3339()],
-        )?;
-        Ok(())
     }
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
         Ok(self

@@ -72,7 +72,8 @@ pub struct Voice {
 #[serde(rename_all = "snake_case")]
 pub enum AnnouncementMode {
     Auto,
-    Queued,
+    #[serde(alias = "queued")]
+    Muted,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -151,7 +152,7 @@ impl Default for Herdr {
 impl Default for Voice {
     fn default() -> Self {
         Self {
-            announcement_mode: AnnouncementMode::Queued,
+            announcement_mode: AnnouncementMode::Muted,
             max_recording_seconds: 60,
             voxtype_state_file: None,
         }
@@ -181,7 +182,7 @@ fn default_api_key_env() -> String {
     "ORCHRD_API_KEY".into()
 }
 fn default_intent_timeout_seconds() -> u64 {
-    20
+    60
 }
 
 impl Config {
@@ -365,7 +366,12 @@ mod tests {
     fn defaults_are_stable() {
         let c = Config::default();
         assert_eq!(c.herdr.session, "orchrd");
-        assert_eq!(c.voice.announcement_mode, AnnouncementMode::Queued);
+        assert_eq!(c.voice.announcement_mode, AnnouncementMode::Muted);
+    }
+    #[test]
+    fn queued_mode_is_read_as_muted_for_compatibility() {
+        let voice: Voice = toml::from_str("announcement_mode = 'queued'").unwrap();
+        assert_eq!(voice.announcement_mode, AnnouncementMode::Muted);
     }
     #[test]
     fn creates_safe_project_ids() {

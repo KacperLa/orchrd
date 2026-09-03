@@ -11,7 +11,7 @@ poll_interval_ms = 2000
 base_url = "https://api.openai.com/v1"
 model = "gpt-5-mini"
 api_key_env = "ORCHRD_API_KEY"
-timeout_seconds = 20
+timeout_seconds = 60
 
 [conversation]
 # All messages remain in SQLite. Only this many recent messages are sent to the
@@ -24,7 +24,7 @@ max_tool_output_chars = 6000
 roots = ["/home/kacper/Documents/Projects"]
 
 [voice]
-announcement_mode = "queued"
+announcement_mode = "muted"
 max_recording_seconds = 60
 
 [tts]

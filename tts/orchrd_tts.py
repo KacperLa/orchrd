@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Persistent Pocket TTS worker for Orchrd.
 
-Protocol: one JSON object per Unix-socket connection. The worker replies with one
-JSON line after accepting the operation. Playback completion is intentionally not
-part of the request lifetime so Orchrd can remain responsive.
+Protocol: one JSON object per Unix-socket connection. Speech requests are played
+in FIFO order, and the worker replies after that request finishes. A cancel
+request stops the current utterance and clears anything still waiting.
 """
 import argparse
 import asyncio
@@ -29,8 +29,8 @@ class Settings:
 class Worker:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.cancel = threading.Event()
-        self.lock = asyncio.Lock()
+        self.queue: asyncio.Queue[tuple[str, asyncio.Future]] = asyncio.Queue()
+        self.current_cancel: threading.Event | None = None
         self.task: asyncio.Task | None = None
         self.model = None
         self.voice_state = None
@@ -46,25 +46,22 @@ class Worker:
         self.model = TTSModel.load_model(**kwargs)
         self.voice_state = self.model.get_state_for_audio_prompt(self.settings.voice)
 
+    def start(self):
+        self.task = asyncio.create_task(self._playback_loop())
+
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             line = await asyncio.wait_for(reader.readline(), timeout=5)
             request = json.loads(line)
             operation = request.get("op")
             if operation == "cancel":
-                self.cancel.set()
-                if self.task:
-                    self.task.cancel()
+                self.cancel_all()
                 response = {"ok": True}
             elif operation == "speak":
                 text = str(request.get("text", "")).strip()
                 if not text:
                     raise ValueError("text is empty")
-                self.cancel.set()
-                if self.task:
-                    self.task.cancel()
-                self.cancel = threading.Event()
-                self.task = asyncio.create_task(self.speak(text, self.cancel))
+                await self.enqueue_speech(text)
                 response = {"ok": True, "id": request.get("id")}
             elif operation == "health":
                 response = {"ok": True, "loaded": self.model is not None}
@@ -77,14 +74,39 @@ class Worker:
         writer.close()
         await writer.wait_closed()
 
-    async def speak(self, text: str, cancel: threading.Event):
-        async with self.lock:
+    async def enqueue_speech(self, text: str):
+        completed = asyncio.get_running_loop().create_future()
+        await self.queue.put((text, completed))
+        await completed
+
+    def cancel_all(self):
+        if self.current_cancel:
+            self.current_cancel.set()
+        while not self.queue.empty():
+            _text, completed = self.queue.get_nowait()
+            if not completed.done():
+                completed.set_exception(RuntimeError("speech cancelled"))
+            self.queue.task_done()
+
+    async def _playback_loop(self):
+        while True:
+            text, completed = await self.queue.get()
+            cancel = threading.Event()
+            self.current_cancel = cancel
             try:
                 await asyncio.to_thread(self._generate_and_play, text, cancel)
-            except asyncio.CancelledError:
-                cancel.set()
+                if cancel.is_set():
+                    raise RuntimeError("speech cancelled")
             except Exception as exc:
                 print(f"Pocket TTS playback failed: {exc}", flush=True)
+                if not completed.done():
+                    completed.set_exception(exc)
+            else:
+                if not completed.done():
+                    completed.set_result(None)
+            finally:
+                self.current_cancel = None
+                self.queue.task_done()
 
     def _generate_and_play(self, text: str, cancel: threading.Event):
         assert self.model is not None and self.voice_state is not None
@@ -139,6 +161,7 @@ async def main():
     settings.socket.unlink(missing_ok=True)
     worker = Worker(settings)
     await asyncio.to_thread(worker.load)
+    worker.start()
     server = await asyncio.start_unix_server(worker.handle, path=settings.socket)
     os.chmod(settings.socket, 0o600)
     async with server:

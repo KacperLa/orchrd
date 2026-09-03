@@ -19,13 +19,13 @@ const HERDR_SESSION = 'orchrd';
 const OrchrdProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
   <interface name="${IFACE}">
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
-    <method name="SpeakNext"/><method name="DismissNext"/>
+    <method name="RepeatLast"/>
     <method name="SetAnnouncementMode"><arg type="s" direction="in"/></method>
     <method name="Approve"><arg type="s" direction="in"/><arg type="b" direction="in"/></method>
     <method name="GetSnapshot"><arg type="s" direction="out"/></method>
     <signal name="StateChanged"><arg type="s"/></signal>
     <signal name="TranscriptReady"><arg type="s"/></signal>
-    <signal name="CompletionQueued"><arg type="s"/><arg type="s"/></signal>
+    <signal name="CompletionFinished"><arg type="s"/><arg type="s"/></signal>
     <signal name="ApprovalRequired"><arg type="s"/><arg type="s"/></signal>
     <signal name="Error"><arg type="s"/></signal>
   </interface>
@@ -53,33 +53,18 @@ class OrchrdIndicator extends PanelMenu.Button {
         openHerdr.connect('activate', () => extension.openHerdr());
         this.menu.addMenuItem(openHerdr);
 
-        this._talk = new PopupMenu.PopupMenuItem('Hold to talk');
-        this._talk.actor.connect('button-press-event', () => {
-            extension.startListening();
-            return Clutter.EVENT_STOP;
-        });
-        this._talk.actor.connect('button-release-event', () => {
-            extension.stopListening();
-            return Clutter.EVENT_STOP;
-        });
-        this.menu.addMenuItem(this._talk);
-
         this._auto = new PopupMenu.PopupSwitchMenuItem('Auto speak results', extension.settings.get_boolean('auto-speak'));
         this._auto.connect('toggled', (_item, enabled) => extension.setAutoSpeak(enabled));
         this.menu.addMenuItem(this._auto);
 
-        const speak = new PopupMenu.PopupMenuItem('Speak next result');
-        speak.connect('activate', () => extension.speakNext());
-        this.menu.addMenuItem(speak);
-        const dismiss = new PopupMenu.PopupMenuItem('Dismiss next result');
-        dismiss.connect('activate', () => extension.dismissNext());
-        this.menu.addMenuItem(dismiss);
+        const repeat = new PopupMenu.PopupMenuItem('Repeat last response');
+        repeat.connect('activate', () => extension.repeatLast());
+        this.menu.addMenuItem(repeat);
     }
 
     update(snapshot) {
-        const pending = snapshot.pending_results ?? 0;
         const project = snapshot.active_project ? ` · ${snapshot.active_project}` : '';
-        this._status.label.text = `${snapshot.state}${project}${pending ? ` · ${pending} pending` : ''}`;
+        this._status.label.text = `${snapshot.state}${project}`;
         const agents = snapshot.agents ?? [];
         this._agents.removeAll();
         if (agents.length) {
@@ -113,13 +98,10 @@ export default class OrchrdExtension extends Extension {
         const flags = Meta.KeyBindingFlags.IGNORE_AUTOREPEAT | Meta.KeyBindingFlags.TRIGGER_RELEASE;
         Main.wm.addKeybinding('push-to-talk', this.settings, flags, Shell.ActionMode.ALL,
             (_display, _window, event) => this._handleTalkEvent(event));
-        Main.wm.addKeybinding('speak-next', this.settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
-            Shell.ActionMode.ALL, () => this.speakNext());
     }
 
     disable() {
         Main.wm.removeKeybinding('push-to-talk');
-        Main.wm.removeKeybinding('speak-next');
         this._proxy?.disconnectSignal?.(this._stateSignal);
         this._proxy = null;
         this._indicator?.destroy();
@@ -134,7 +116,7 @@ export default class OrchrdExtension extends Extension {
                 return;
             }
             this._stateSignal = this._proxy.connectSignal('StateChanged', (_p, _sender, [json]) => this._applySnapshot(json));
-            this._proxy.connectSignal('CompletionQueued', (_p, _sender, [project, speech]) => {
+            this._proxy.connectSignal('CompletionFinished', (_p, _sender, [project, speech]) => {
                 if (!this.settings.get_boolean('auto-speak'))
                     this._ding('complete');
                 Main.notify(`Orchrd · ${project || 'Agent finished'}`, speech);
@@ -171,8 +153,7 @@ export default class OrchrdExtension extends Extension {
 
     startListening() { this._call('StartListening'); }
     stopListening() { this._call('StopListening'); }
-    speakNext() { this._call('SpeakNext'); }
-    dismissNext() { this._call('DismissNext'); }
+    repeatLast() { this._call('RepeatLast'); }
 
     openHerdr() {
         try {
@@ -191,10 +172,10 @@ export default class OrchrdExtension extends Extension {
 
     setAutoSpeak(enabled) {
         this.settings.set_boolean('auto-speak', enabled);
-        this._call('SetAnnouncementMode', enabled ? 'auto' : 'queued');
+        this._call('SetAnnouncementMode', enabled ? 'auto' : 'muted');
     }
 
-    _syncMode() { this._call('SetAnnouncementMode', this.settings.get_boolean('auto-speak') ? 'auto' : 'queued'); }
+    _syncMode() { this._call('SetAnnouncementMode', this.settings.get_boolean('auto-speak') ? 'auto' : 'muted'); }
 
     _call(method, ...args) {
         if (!this._proxy?.g_name_owner) {
@@ -221,7 +202,7 @@ export default class OrchrdExtension extends Extension {
     }
 
     _setOffline(message) {
-        this._indicator?.update({state: 'offline', agents: [], pending_results: 0, message});
+        this._indicator?.update({state: 'offline', agents: [], message});
     }
 
     _ding(eventId) {

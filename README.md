@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="extension/icons/orchrd-symbolic.svg" width="132" height="132" alt="Orchrd broccoli icon">
+  <img src="extension/icons/orchrd-symbolic.svg" width="132" height="132" alt="Orchrd forest icon">
 </p>
 
 <h1 align="center">Orchrd</h1>
@@ -16,7 +16,7 @@ Orchrd turns GNOME into a lightweight voice interface for software work. It
 listens through Voxtype, interprets your request with a small conversational
 agent, and operates persistent Codex sessions managed by Herdr. When a coding
 agent needs input, Orchrd asks you. When the work finishes, it can speak a
-short summary or save it until you are ready to listen.
+short summary or stay silent and show a notification.
 
 Orchrd is deliberately small. It is not another coding agent and it does not
 replace your terminal workflow. It is the layer that keeps several projects
@@ -37,7 +37,7 @@ flowchart LR
     TTS --> Voice
 ```
 
-1. Hold <kbd>Print Screen</kbd> or press and hold **Hold to talk** in the panel.
+1. Hold <kbd>Print Screen</kbd> while speaking.
 2. Orchrd asks Voxtype to record and transcribe the utterance.
 3. The conversational model interprets the request, resolves explicit
    references from recent dialogue, and chooses an Orchrd tool.
@@ -47,7 +47,7 @@ flowchart LR
    you respond naturally.
 6. When the task finishes, Orchrd summarizes only that task's terminal output.
 7. Depending on the selected mode, Pocket TTS speaks the result immediately or
-   Orchrd plays a notification sound and queues it for later.
+   Orchrd stays muted and plays a notification sound.
 
 The conversation has a rolling window, so replies such as “approve it,” “ask
 it why,” or “continue with that project” can refer to the immediately preceding
@@ -60,8 +60,8 @@ currently performed.
 | Component | Responsibility |
 | --- | --- |
 | `orchrdd` | Rust controller, conversation tool loop, state reconciliation, approvals, and D-Bus API |
-| `orchrd@kacper.local` | GNOME Shell panel menu, push-to-talk shortcuts, status, and notifications |
-| `orchrd-tts` | Persistent local Pocket TTS worker |
+| GNOME extension | Panel menu, push-to-talk shortcuts, status, and notifications |
+| `orchrd-tts` | Persistent local Pocket TTS worker with ordered playback |
 | Voxtype | Recording and speech-to-text |
 | Herdr | Persistent terminal workspaces and coding-agent sessions |
 | Codex | Coding, repository inspection, and implementation |
@@ -87,7 +87,7 @@ install or replace them.
 Add the repository as an input:
 
 ```nix
-inputs.orchrd.url = "path:/home/you/Documents/Projects/orchrd";
+inputs.orchrd.url = "github:KacperLa/orchrd";
 ```
 
 Make the Home Manager module available and enable Orchrd for your user:
@@ -101,16 +101,11 @@ Make the Home Manager module available and enable Orchrd for your user:
       enable = true;
       configFile = "/home/you/.config/orchrd/config.toml";
     };
-
-    dconf.settings."org/gnome/shell".enabled-extensions = [
-      "orchrd@kacper.local"
-    ];
   };
 }
 ```
 
-If you already manage `enabled-extensions`, add Orchrd to that existing list
-instead of defining the setting twice.
+After rebuilding, enable Orchrd using the GNOME Extensions application.
 
 The module installs Orchrd into the user profile and creates three user
 services: `orchrd.service`, `orchrd-tts.service`, and, by default,
@@ -141,6 +136,9 @@ api_key_env = "ORCHRD_API_KEY"
 
 [discovery]
 roots = ["/home/you/Documents/Projects"]
+
+[voice]
+announcement_mode = "muted"
 
 [tts]
 language = "english_2026-04"
@@ -197,7 +195,7 @@ assets outside the Nix store as user data.
 
 ### 5. Build and activate
 
-For a local path input, refresh only Orchrd's lock entry before rebuilding:
+Update Orchrd's lock entry to fetch the latest revision, then rebuild:
 
 ```bash
 cd /path/to/your/nixos-config
@@ -208,8 +206,9 @@ sudo nixos-rebuild switch --flake .#your-host
 Reload the extension after an extension-only change:
 
 ```bash
-gnome-extensions disable orchrd@kacper.local
-gnome-extensions enable orchrd@kacper.local
+orchrd_uuid="$(gnome-extensions list | grep '^orchrd@' | head -n1)"
+gnome-extensions disable "$orchrd_uuid"
+gnome-extensions enable "$orchrd_uuid"
 ```
 
 ### 6. Verify the services
@@ -224,22 +223,28 @@ orchrdctl status
 ## Using Orchrd
 
 The default push-to-talk key is <kbd>Print Screen</kbd>. Hold it while speaking
-and release it to transcribe and route the request. You can also hold the
-**Hold to talk** row in the panel menu.
+and release it to transcribe and route the request.
 
 The panel shows the controller state and each project session on its own row.
 It also provides:
 
 - **Open Herdr** to open the Orchrd Herdr session in GNOME Console
-- **Auto speak results** to switch between immediate speech and queued results
-- **Speak next result** to read the oldest queued completion
-- **Dismiss next result** to discard the oldest queued completion
+- **Auto speak results** to switch between immediate speech and muted notifications
+- **Repeat last response** to hear the last thing Orchrd spoke again
+
+Muted completions are recorded normally but are not placed in a pending-results
+queue. Ask Orchrd for a project or agent status when you want to catch up.
+**Repeat last response** replays the most recent utterance that finished speaking,
+and remains available after a service restart. If multiple spoken responses
+arrive together, Pocket TTS plays them in order without interrupting either one.
+Starting push-to-talk is the explicit interruption: it stops current speech and
+clears any audio still waiting to play.
 
 Example requests:
 
 ```text
 Ask the Orchrd agent to fix the failing tests.
-Start a new session for Bike FSD.
+Start a new session for my website.
 Resume the latest Orchrd session.
 What did the agent just finish?
 Approve the request.
@@ -250,7 +255,6 @@ To change the shortcuts:
 
 ```bash
 gsettings set org.gnome.shell.extensions.orchrd push-to-talk "['Print']"
-gsettings set org.gnome.shell.extensions.orchrd speak-next "['<Ctrl><Alt><Shift>space']"
 ```
 
 ## Command-line controls
@@ -261,9 +265,8 @@ gsettings set org.gnome.shell.extensions.orchrd speak-next "['<Ctrl><Alt><Shift>
 orchrdctl status
 orchrdctl dispatch "what is Orchrd working on?"
 orchrdctl mode auto
-orchrdctl mode queued
-orchrdctl speak-next
-orchrdctl dismiss-next
+orchrdctl mode muted
+orchrdctl repeat-last
 orchrdctl start
 orchrdctl stop
 orchrdctl cancel
@@ -309,3 +312,7 @@ nix flake check
 
 Orchrd is currently an early, personal project. Its configuration and D-Bus
 surface may change while the interaction model settles.
+
+The application icon is adapted from Lucide's
+[trees-forest](https://github.com/lucide-icons/lucide/blob/main/lab/trees-forest.svg)
+icon, copyright Lucide Icons and contributors, and used under the ISC License.

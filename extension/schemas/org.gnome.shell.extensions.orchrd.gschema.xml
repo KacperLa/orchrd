@@ -5,10 +5,6 @@
       <default>['Print']</default>
       <summary>Hold to speak to Orchrd</summary>
     </key>
-    <key name="speak-next" type="as">
-      <default>['&lt;Ctrl&gt;&lt;Alt&gt;&lt;Shift&gt;space']</default>
-      <summary>Speak the oldest queued agent result</summary>
-    </key>
     <key name="auto-speak" type="b">
       <default>false</default>
       <summary>Automatically speak completed agent results</summary>
