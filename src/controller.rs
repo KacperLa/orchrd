@@ -1,7 +1,7 @@
 use crate::{
     config::{AnnouncementMode, Config, Project},
     db::{AgentSession, Database},
-    herdr::{agent_states, HerdrClient},
+    herdr::{agent_infos, agent_states, HerdrClient, HerdrSessionInfo},
     intent::{redact, IntentClient, ToolCall},
     tts::{concise_speech, TtsClient},
     voxtype::Voxtype,
@@ -24,6 +24,9 @@ pub struct Snapshot {
     pub state: String,
     pub active_project: Option<String>,
     pub agents: Vec<AgentSession>,
+    pub herdr_sessions: Vec<HerdrSessionInfo>,
+    pub selected_herdr_session: Option<String>,
+    pub last_herdr_session: Option<String>,
     pub announcement_mode: AnnouncementMode,
     pub message: Option<String>,
 }
@@ -70,8 +73,25 @@ impl Controller {
                 }
             })
             .unwrap_or(config.voice.announcement_mode);
-        let agents = db.sessions()?;
-        let initial_state = reconciled_state(&agents).to_owned();
+        let herdr = HerdrClient::new(config.commands.herdr.clone());
+        let herdr_sessions = herdr.list_sessions().await.unwrap_or_default();
+        let last_herdr_session = db.setting("last_herdr_session")?;
+        let selected_herdr_session = db
+            .setting("selected_herdr_session")?
+            .or_else(|| last_herdr_session.clone());
+        let selected_running = selected_herdr_session.as_deref().is_some_and(|selected| {
+            herdr_sessions
+                .iter()
+                .any(|session| session.name == selected && session.running)
+        });
+        let agents = selected_herdr_session
+            .as_deref()
+            .map(|session| db.sessions(session))
+            .transpose()?
+            .unwrap_or_default();
+        let initial_state =
+            reconciled_state(&agents, selected_herdr_session.is_some(), selected_running)
+                .to_owned();
         let active_project = db.setting("active_project")?;
         let (events, _) = broadcast::channel(128);
         let c = Arc::new(Self {
@@ -81,7 +101,7 @@ impl Controller {
                 Config::runtime_dir(),
                 config.voice.max_recording_seconds,
             ),
-            herdr: HerdrClient::new(config.commands.herdr.clone(), config.herdr.session.clone()),
+            herdr,
             intent: IntentClient::new(&config)?,
             tts: TtsClient::new(config.tts_socket()),
             config: Arc::new(config),
@@ -91,6 +111,9 @@ impl Controller {
                 state: initial_state,
                 active_project,
                 agents,
+                herdr_sessions,
+                selected_herdr_session,
+                last_herdr_session,
                 announcement_mode: mode,
                 message: None,
             }),
@@ -109,8 +132,58 @@ impl Controller {
         let mut s = self.state.write().await;
         s.state = state.into();
         s.message = message;
-        s.agents = self.db.sessions().unwrap_or_default();
+        s.agents = s
+            .selected_herdr_session
+            .as_deref()
+            .and_then(|session| self.db.sessions(session).ok())
+            .unwrap_or_default();
         let _ = self.events.send(Event::Snapshot(s.clone()));
+    }
+    pub async fn select_herdr_session(&self, name: &str) -> Result<()> {
+        let sessions = self.herdr.list_sessions().await?;
+        if !sessions
+            .iter()
+            .any(|session| session.name == name && session.running)
+        {
+            bail!("Herdr session {name} is not running")
+        }
+        self.db.set_setting("selected_herdr_session", name)?;
+        self.db.set_setting("last_herdr_session", name)?;
+        {
+            let mut state = self.state.write().await;
+            state.herdr_sessions = sessions;
+            state.selected_herdr_session = Some(name.to_owned());
+            state.last_herdr_session = Some(name.to_owned());
+        }
+        self.refresh_live_sessions().await?;
+        self.update_reconciled(Some(format!("Using Herdr session {name}")))
+            .await;
+        Ok(())
+    }
+    pub async fn resume_last_herdr_session(&self) -> Result<String> {
+        let name = self
+            .state
+            .read()
+            .await
+            .last_herdr_session
+            .clone()
+            .context("No previous Herdr session")?;
+        self.db.set_setting("selected_herdr_session", &name)?;
+        self.state.write().await.selected_herdr_session = Some(name.clone());
+        self.update(
+            "session_unavailable",
+            Some(format!("Resuming Herdr session {name}")),
+        )
+        .await;
+        Ok(name)
+    }
+    async fn selected_herdr_session(&self) -> Result<String> {
+        self.state
+            .read()
+            .await
+            .selected_herdr_session
+            .clone()
+            .context("Choose a running Herdr session from the Orchrd menu")
     }
     pub async fn start_listening(&self) -> Result<()> {
         let _ = self.tts.cancel().await;
@@ -166,7 +239,10 @@ impl Controller {
             Ok(sessions) => sessions,
             Err(error) => {
                 tracing::debug!(%error, "could not refresh Herdr state before conversation");
-                self.db.sessions()?
+                match self.state.read().await.selected_herdr_session.as_deref() {
+                    Some(session) => self.db.sessions(session)?,
+                    None => vec![],
+                }
             }
         };
         let history = self
@@ -248,6 +324,7 @@ impl Controller {
             "list_agents" => Ok(serde_json::to_value(self.refresh_live_sessions().await?)?),
             "read_agent" => {
                 let project_id = string_arg(&call.arguments, "project_id")?;
+                let herdr_session = self.selected_herdr_session().await?;
                 let lines = call
                     .arguments
                     .get("lines")
@@ -256,11 +333,11 @@ impl Controller {
                     .clamp(10, 300) as usize;
                 let session = self
                     .db
-                    .session(project_id)?
+                    .session(&herdr_session, project_id)?
                     .with_context(|| format!("project {project_id} has no agent"))?;
                 self.set_active_project(project_id).await?;
                 Ok(
-                    json!({"project_id":project_id,"status":session.status,"output":self.herdr.read(&session.agent_name, lines).await?}),
+                    json!({"project_id":project_id,"status":session.status,"output":self.herdr.read(&herdr_session, &session.agent_name, lines).await?}),
                 )
             }
             "start_session" => {
@@ -307,12 +384,16 @@ impl Controller {
             }
             "cancel_agent" => {
                 let project_id = string_arg(&call.arguments, "project_id")?;
+                let herdr_session = self.selected_herdr_session().await?;
                 let session = self
                     .db
-                    .session(project_id)?
+                    .session(&herdr_session, project_id)?
                     .with_context(|| format!("project {project_id} has no agent"))?;
-                self.herdr.send_keys(&session.agent_name, &["esc"]).await?;
-                self.db.set_session_status(project_id, "idle")?;
+                self.herdr
+                    .send_keys(&herdr_session, &session.agent_name, &["esc"])
+                    .await?;
+                self.db
+                    .set_session_status(&herdr_session, project_id, "idle")?;
                 self.update_reconciled(Some(format!("Cancelled {project_id}")))
                     .await;
                 Ok(json!({"project_id":project_id,"cancelled":true}))
@@ -330,29 +411,40 @@ impl Controller {
         self.resolve_agent_decision(project_id, approve).await
     }
     async fn resolve_agent_decision(&self, project_id: &str, approve: bool) -> Result<()> {
+        let herdr_session = self.selected_herdr_session().await?;
         let session = self
             .db
-            .session(project_id)?
+            .session(&herdr_session, project_id)?
             .with_context(|| format!("project {project_id} has no agent"))?;
-        let live_status = self.live_agent_status(&session.agent_name).await?;
+        let live_status = self
+            .live_agent_status(&herdr_session, &session.agent_name)
+            .await?;
         if live_status.as_deref() != Some("blocked") {
             bail!("{project_id} is not waiting for approval")
         }
         // The monitor may not have persisted the latest Herdr transition yet.
         if session.status != "blocked" {
-            self.db.set_session_status(project_id, "blocked")?;
+            self.db
+                .set_session_status(&herdr_session, project_id, "blocked")?;
         }
-        let terminal = self.herdr.read(&session.agent_name, 100).await?;
+        let terminal = self
+            .herdr
+            .read(&herdr_session, &session.agent_name, 100)
+            .await?;
         let keys = if approve {
             approval_keys(&terminal)
         } else {
             vec!["esc"]
         };
-        self.herdr.send_keys(&session.agent_name, &keys).await?;
+        self.herdr
+            .send_keys(&herdr_session, &session.agent_name, &keys)
+            .await?;
 
         let deadline = Instant::now() + APPROVAL_CONFIRM_TIMEOUT;
         let confirmed_status = loop {
-            let status = self.live_agent_status(&session.agent_name).await?;
+            let status = self
+                .live_agent_status(&herdr_session, &session.agent_name)
+                .await?;
             if status.as_deref() != Some("blocked") {
                 break status;
             }
@@ -361,32 +453,92 @@ impl Controller {
             }
             sleep(APPROVAL_CONFIRM_POLL_INTERVAL).await;
         };
-        self.db
-            .set_session_status(project_id, confirmed_status.as_deref().unwrap_or("unknown"))?;
+        self.db.set_session_status(
+            &herdr_session,
+            project_id,
+            confirmed_status.as_deref().unwrap_or("unknown"),
+        )?;
         let decision = if approve { "Approved" } else { "Denied" };
         self.update_reconciled(Some(format!("{decision} request for {project_id}")))
             .await;
         Ok(())
     }
-    async fn live_agent_status(&self, agent_name: &str) -> Result<Option<String>> {
-        Ok(agent_states(&self.herdr.agent_list().await?)
+    async fn live_agent_status(
+        &self,
+        herdr_session: &str,
+        agent_name: &str,
+    ) -> Result<Option<String>> {
+        Ok(agent_states(&self.herdr.agent_list(herdr_session).await?)
             .into_iter()
             .find_map(|(name, status)| (name == agent_name).then_some(status)))
     }
     async fn refresh_live_sessions(&self) -> Result<Vec<AgentSession>> {
-        let states: HashMap<_, _> = agent_states(&self.herdr.agent_list().await?)
-            .into_iter()
-            .collect();
-        let mut sessions = self.db.sessions()?;
+        let herdr_session = self.selected_herdr_session().await?;
+        let value = self.herdr.agent_list(&herdr_session).await?;
+        let states: HashMap<_, _> = agent_states(&value).into_iter().collect();
+        self.drop_stale_bindings(&herdr_session, &states)?;
+        self.adopt_agents(&herdr_session, &value).await?;
+        let mut sessions = self.db.sessions(&herdr_session)?;
         for session in &mut sessions {
             if let Some(status) = states.get(&session.agent_name) {
                 if session.status != *status {
-                    self.db.set_session_status(&session.project_id, status)?;
+                    self.db
+                        .set_session_status(&herdr_session, &session.project_id, status)?;
                     session.status.clone_from(status);
                 }
             }
         }
         Ok(sessions)
+    }
+    fn drop_stale_bindings(
+        &self,
+        herdr_session: &str,
+        states: &HashMap<String, String>,
+    ) -> Result<bool> {
+        let mut removed = false;
+        for binding in self.db.sessions(herdr_session)? {
+            if !states.contains_key(&binding.agent_name) {
+                self.db.delete_session(herdr_session, &binding.project_id)?;
+                removed = true;
+            }
+        }
+        Ok(removed)
+    }
+    async fn adopt_agents(&self, herdr_session: &str, value: &Value) -> Result<bool> {
+        let projects = self.projects.read().await;
+        let mut adopted = false;
+        for project in projects.iter() {
+            if self.db.session(herdr_session, &project.id)?.is_some() {
+                continue;
+            }
+            let mut matches = agent_infos(value)
+                .into_iter()
+                .filter(|agent| agent.kind.as_deref() == Some("codex"))
+                .filter(|agent| {
+                    agent.cwd.as_deref().is_some_and(|cwd| {
+                        cwd.starts_with(&project.path)
+                            && !projects.iter().any(|other| {
+                                other.path != project.path
+                                    && other.path.starts_with(&project.path)
+                                    && cwd.starts_with(&other.path)
+                            })
+                    })
+                })
+                .collect::<Vec<_>>();
+            matches.sort_by_key(|agent| !agent.focused);
+            if let Some(agent) = matches.first() {
+                self.db.upsert_session(&AgentSession {
+                    herdr_session: herdr_session.to_owned(),
+                    project_id: project.id.clone(),
+                    workspace_id: agent.workspace_id.clone(),
+                    pane_id: agent.pane_id.clone(),
+                    agent_name: agent.name.clone(),
+                    status: agent.status.clone(),
+                })?;
+                adopted = true;
+            }
+        }
+        Ok(adopted)
     }
     async fn start_task(
         &self,
@@ -396,8 +548,9 @@ impl Controller {
         fresh: bool,
     ) -> Result<String> {
         let project = self.project(project_id).await?;
+        let herdr_session = self.selected_herdr_session().await?;
         let session = if !fresh {
-            self.db.session(project_id)?
+            self.db.session(&herdr_session, project_id)?
         } else {
             None
         };
@@ -409,7 +562,10 @@ impl Controller {
                     launch_project.id =
                         format!("{}-{}", project.id, &Uuid::new_v4().to_string()[..8]);
                 }
-                let mut s = self.herdr.create_session(&launch_project).await?;
+                let mut s = self
+                    .herdr
+                    .create_session(&herdr_session, &launch_project)
+                    .await?;
                 s.project_id = project.id.clone();
                 self.db.upsert_session(&s)?;
                 s
@@ -417,10 +573,16 @@ impl Controller {
         };
         let terminal_baseline = self
             .herdr
-            .read(&session.agent_name, self.config.summary.max_terminal_lines)
+            .read(
+                &herdr_session,
+                &session.agent_name,
+                self.config.summary.max_terminal_lines,
+            )
             .await
             .unwrap_or_default();
-        self.herdr.prompt(&session.agent_name, instruction).await?;
+        self.herdr
+            .prompt(&herdr_session, &session.agent_name, instruction)
+            .await?;
         session.status = "working".into();
         self.db.upsert_session(&session)?;
         let run = Uuid::new_v4().to_string();
@@ -430,6 +592,7 @@ impl Controller {
             transcript,
             instruction,
             &terminal_baseline,
+            &herdr_session,
         )?;
         self.set_active_project(project_id).await?;
         self.update_reconciled(Some(format!("Sent to {}", project.name)))
@@ -438,12 +601,17 @@ impl Controller {
     }
     async fn open_session(&self, project_id: &str, resume: bool) -> Result<AgentSession> {
         let project = self.project(project_id).await?;
+        let herdr_session = self.selected_herdr_session().await?;
         let mut launch_project = project.clone();
         launch_project.id = format!("{}-{}", project.id, &Uuid::new_v4().to_string()[..8]);
         let mut session = if resume {
-            self.herdr.resume_session(&launch_project).await?
+            self.herdr
+                .resume_session(&herdr_session, &launch_project)
+                .await?
         } else {
-            self.herdr.create_session(&launch_project).await?
+            self.herdr
+                .create_session(&herdr_session, &launch_project)
+                .await?
         };
         session.project_id = project.id.clone();
         self.db.upsert_session(&session)?;
@@ -530,8 +698,20 @@ impl Controller {
         Ok(())
     }
     async fn update_reconciled(&self, message: Option<String>) {
-        let agents = self.db.sessions().unwrap_or_default();
-        let state = reconciled_state(&agents);
+        let snapshot = self.state.read().await;
+        let selected = snapshot.selected_herdr_session.clone();
+        let selected_running = selected.as_deref().is_some_and(|name| {
+            snapshot
+                .herdr_sessions
+                .iter()
+                .any(|session| session.name == name && session.running)
+        });
+        drop(snapshot);
+        let agents = selected
+            .as_deref()
+            .and_then(|session| self.db.sessions(session).ok())
+            .unwrap_or_default();
+        let state = reconciled_state(&agents, selected.is_some(), selected_running);
         self.update(state, message).await;
     }
     async fn report_error(&self, e: anyhow::Error) {
@@ -542,29 +722,92 @@ impl Controller {
     }
     pub async fn monitor(self: Arc<Self>) {
         loop {
-            match self.herdr.agent_list().await {
-                Ok(value) => {
+            let directory = self.herdr.list_sessions().await;
+            let selected = self.state.read().await.selected_herdr_session.clone();
+            match directory {
+                Ok(sessions) => {
+                    let directory_changed = self.state.read().await.herdr_sessions != sessions;
+                    if directory_changed {
+                        let snapshot = {
+                            let mut state = self.state.write().await;
+                            state.herdr_sessions = sessions.clone();
+                            state.clone()
+                        };
+                        let _ = self.events.send(Event::Snapshot(snapshot));
+                    }
+                    let Some(herdr_session) = selected else {
+                        if self.state.read().await.state != "no_session" {
+                            self.update("no_session", Some("Choose a Herdr session".into()))
+                                .await;
+                        }
+                        sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
+                        continue;
+                    };
+                    let running = sessions
+                        .iter()
+                        .any(|session| session.name == herdr_session && session.running);
+                    if !running {
+                        if self.state.read().await.state != "session_unavailable" {
+                            self.update(
+                                "session_unavailable",
+                                Some(format!("Herdr session {herdr_session} is not running")),
+                            )
+                            .await;
+                        }
+                        sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
+                        continue;
+                    }
+                    if matches!(
+                        self.state.read().await.state.as_str(),
+                        "no_session" | "session_unavailable"
+                    ) {
+                        self.update_reconciled(None).await;
+                    }
+                    let value = match self.herdr.agent_list(&herdr_session).await {
+                        Ok(value) => value,
+                        Err(error) => {
+                            tracing::debug!(%error, %herdr_session, "selected Herdr session unavailable");
+                            sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
+                            continue;
+                        }
+                    };
+                    let states: HashMap<_, _> = agent_states(&value).into_iter().collect();
+                    let removed = self
+                        .drop_stale_bindings(&herdr_session, &states)
+                        .unwrap_or(false);
+                    let adopted = match self.adopt_agents(&herdr_session, &value).await {
+                        Ok(adopted) => adopted,
+                        Err(error) => {
+                            tracing::warn!(%error, %herdr_session, "could not adopt Herdr agents");
+                            false
+                        }
+                    };
                     for (name, status) in agent_states(&value) {
                         if let Some(session) = self
                             .db
-                            .sessions()
+                            .sessions(&herdr_session)
                             .unwrap_or_default()
                             .into_iter()
                             .find(|s| s.agent_name == name)
                         {
                             let old = session.status.clone();
                             if old != status {
-                                let _ = self.db.set_session_status(&session.project_id, &status);
+                                let _ = self.db.set_session_status(
+                                    &herdr_session,
+                                    &session.project_id,
+                                    &status,
+                                );
                                 if status == "done" && old != "done" {
                                     let has_working_run = self
                                         .db
-                                        .latest_run(&session.project_id)
+                                        .latest_working_run(&session.project_id, &herdr_session)
                                         .ok()
                                         .flatten()
-                                        .is_some_and(|run| run.status == "working");
+                                        .is_some();
                                     if has_working_run {
                                         if let Err(error) = self
                                             .finish_project(
+                                                &herdr_session,
                                                 &session.project_id,
                                                 &session.agent_name,
                                             )
@@ -583,7 +826,7 @@ impl Controller {
                                     let project = self.project(&session.project_id).await;
                                     let terminal = self
                                         .herdr
-                                        .read(&session.agent_name, 100)
+                                        .read(&herdr_session, &session.agent_name, 100)
                                         .await
                                         .unwrap_or_default();
                                     let message = match project {
@@ -629,22 +872,30 @@ impl Controller {
                             }
                         }
                     }
+                    if adopted || removed {
+                        self.update_reconciled(None).await;
+                    }
                 }
-                Err(error) => tracing::debug!("Herdr poll unavailable: {error:#}"),
+                Err(error) => tracing::debug!("Herdr session discovery unavailable: {error:#}"),
             }
             sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
         }
     }
-    async fn finish_project(&self, project_id: &str, agent: &str) -> Result<()> {
+    async fn finish_project(
+        &self,
+        herdr_session: &str,
+        project_id: &str,
+        agent: &str,
+    ) -> Result<()> {
         let project = self.project(project_id).await?;
         let run = self
             .db
-            .latest_run(project_id)?
+            .latest_working_run(project_id, herdr_session)?
             .context("completed agent has no run")?;
         let baseline = self.db.run_terminal_baseline(&run.id)?;
         let terminal = match self
             .herdr
-            .read(agent, self.config.summary.max_terminal_lines)
+            .read(herdr_session, agent, self.config.summary.max_terminal_lines)
             .await
         {
             Ok(terminal) => terminal_since_baseline(&baseline, &terminal),
@@ -675,7 +926,7 @@ impl Controller {
         let speech = concise_speech(&speech);
         let id = self
             .db
-            .finish_latest_run(project_id, "done", &speech)?
+            .finish_latest_run(project_id, herdr_session, "done", &speech)?
             .context("no working run")?;
         self.db.add_conversation_message(
             "assistant",
@@ -806,8 +1057,16 @@ fn approval_keys(terminal: &str) -> Vec<&'static str> {
     }
 }
 
-fn reconciled_state(agents: &[AgentSession]) -> &'static str {
-    if agents.iter().any(|agent| agent.status == "blocked") {
+fn reconciled_state(
+    agents: &[AgentSession],
+    has_selected_session: bool,
+    selected_session_running: bool,
+) -> &'static str {
+    if !has_selected_session {
+        "no_session"
+    } else if !selected_session_running {
+        "session_unavailable"
+    } else if agents.iter().any(|agent| agent.status == "blocked") {
         "blocked"
     } else if agents.iter().any(|agent| agent.status == "working") {
         "working"
@@ -824,6 +1083,7 @@ mod tests {
 
     fn session(status: &str) -> AgentSession {
         AgentSession {
+            herdr_session: "work".into(),
             project_id: status.into(),
             workspace_id: "w1".into(),
             pane_id: "w1:p1".into(),
@@ -834,12 +1094,17 @@ mod tests {
 
     #[test]
     fn reconciles_agent_states() {
-        assert_eq!(reconciled_state(&[session("working")]), "working");
         assert_eq!(
-            reconciled_state(&[session("working"), session("blocked")]),
+            reconciled_state(&[session("working")], true, true),
+            "working"
+        );
+        assert_eq!(
+            reconciled_state(&[session("working"), session("blocked")], true, true),
             "blocked"
         );
-        assert_eq!(reconciled_state(&[session("done")]), "idle");
+        assert_eq!(reconciled_state(&[session("done")], true, true), "idle");
+        assert_eq!(reconciled_state(&[], false, false), "no_session");
+        assert_eq!(reconciled_state(&[], true, false), "session_unavailable");
     }
 
     #[test]

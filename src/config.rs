@@ -38,7 +38,6 @@ pub struct Commands {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Herdr {
-    pub session: String,
     pub poll_interval_ms: u64,
 }
 
@@ -144,7 +143,6 @@ impl Default for Commands {
 impl Default for Herdr {
     fn default() -> Self {
         Self {
-            session: "orchrd".into(),
             poll_interval_ms: 2_000,
         }
     }
@@ -365,7 +363,6 @@ mod tests {
     #[test]
     fn defaults_are_stable() {
         let c = Config::default();
-        assert_eq!(c.herdr.session, "orchrd");
         assert_eq!(c.voice.announcement_mode, AnnouncementMode::Muted);
     }
     #[test]

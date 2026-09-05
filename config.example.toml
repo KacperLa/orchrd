@@ -4,7 +4,6 @@ herdr = "herdr"
 codex = "codex"
 
 [herdr]
-session = "orchrd"
 poll_interval_ms = 2000
 
 [intent]

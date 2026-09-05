@@ -274,6 +274,7 @@ mod tests {
             goal: "A potentially biasing project description".into(),
         }];
         let sessions = vec![AgentSession {
+            herdr_session: "work".into(),
             project_id: "orchrd".into(),
             workspace_id: "w1".into(),
             pane_id: "w1:p1".into(),

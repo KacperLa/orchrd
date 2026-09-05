@@ -30,7 +30,8 @@ in
     };
     enableHerdrServer = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = false;
+      description = "Start an optional dedicated Herdr server that can be selected in Orchrd";
     };
   };
 

@@ -9,14 +9,15 @@
 </p>
 
 <p align="center">
-  Hold a key, say what you want, and let Orchrd route the request to the right Codex session in Herdr.
+  Pick a Herdr session, hold a key, and route your request to the right Codex agent by voice.
 </p>
 
 Orchrd turns GNOME into a lightweight voice interface for software work. It
-listens through Voxtype, interprets your request with a small conversational
-agent, and operates persistent Codex sessions managed by Herdr. When a coding
-agent needs input, Orchrd asks you. When the work finishes, it can speak a
-short summary or stay silent and show a notification.
+uses Voxtype for recording and transcription, interprets your request with a
+small tool-calling conversational agent, and operates Codex agents inside one
+Herdr session selected by you. When a coding agent needs input, Orchrd asks
+you. When the work finishes, it can speak a short summary or stay silent and
+show a notification.
 
 Orchrd is deliberately small. It is not another coding agent and it does not
 replace your terminal workflow. It is the layer that keeps several projects
@@ -30,7 +31,7 @@ flowchart LR
     Shell --> STT[Voxtype]
     STT --> Router[Orchrd controller]
     Router --> Intent[Conversational model]
-    Intent --> Herdr[Herdr session]
+    Intent --> Herdr[Selected Herdr session]
     Herdr --> Codex[Codex agent]
     Codex --> Summary[Task-scoped summary]
     Summary --> TTS[Pocket TTS]
@@ -42,18 +43,35 @@ flowchart LR
 3. The conversational model interprets the request, resolves explicit
    references from recent dialogue, and chooses an Orchrd tool.
 4. Orchrd sends a cleaned, non-speculative request to the appropriate Codex
-   agent in Herdr.
-5. If Codex requests approval or clarification, Orchrd announces it and lets
-   you respond naturally.
+   agent in the Herdr session you selected from the panel.
+5. If Codex requests approval or clarification, Orchrd announces it. A natural
+   reply such as “approve it” is converted into an explicit approval tool call,
+   sent to Herdr, and reported as successful only after the agent leaves its
+   blocked state.
 6. When the task finishes, Orchrd summarizes only that task's terminal output.
 7. Depending on the selected mode, Pocket TTS speaks the result immediately or
    Orchrd stays muted and plays a notification sound.
 
 The conversation has a rolling window, so replies such as “approve it,” “ask
 it why,” or “continue with that project” can refer to the immediately preceding
-exchange. Conversation history is retained in SQLite; only the latest configured
-number of messages is sent to the conversational model, and no compaction is
-currently performed.
+exchange, including what Orchrd just said. Conversation history is retained in
+SQLite; only the latest configured number of messages is sent to the
+conversational model, and no compaction or long-term memory is currently
+performed.
+
+The model receives a minimal routing snapshot containing project names, project
+IDs, agent states, and the active project. Project paths, project goals, Herdr
+pane details, and internal context markers are excluded. Requests sent to Codex
+are cleaned semantic transcriptions: Orchrd may fix obvious recognition errors
+and remove filler, but it is instructed not to invent requirements, rationale,
+implementation details, or acceptance criteria.
+
+Starting an empty Codex session, resuming its latest saved conversation,
+sending work, reading agent output, approving or denying a prompt, and
+cancelling work are separate tool operations. Orchrd acknowledges state-changing
+operations only after the operation succeeds. Spoken output is also normalized
+in code to plain text of at most two sentences, without Markdown or numbered
+lists.
 
 ## Components
 
@@ -63,7 +81,7 @@ currently performed.
 | GNOME extension | Panel menu, push-to-talk shortcuts, status, and notifications |
 | `orchrd-tts` | Persistent local Pocket TTS worker with ordered playback |
 | Voxtype | Recording and speech-to-text |
-| Herdr | Persistent terminal workspaces and coding-agent sessions |
+| Herdr | User-owned persistent terminal workspaces and coding-agent sessions |
 | Codex | Coding, repository inspection, and implementation |
 
 Voxtype, Herdr, and Codex are system prerequisites. Orchrd's flake does not
@@ -77,7 +95,8 @@ install or replace them.
 - A working `voxtype` command and user service
 - A working `herdr` command
 - A working system `codex` command
-- An OpenAI-compatible chat-completions endpoint and API key
+- An OpenAI-compatible chat-completions endpoint with tool-calling support and
+  an API key
 - Pocket TTS model, tokenizer, and voice assets stored locally
 
 ## Setup
@@ -107,13 +126,27 @@ Make the Home Manager module available and enable Orchrd for your user:
 
 After rebuilding, enable Orchrd using the GNOME Extensions application.
 
-The module installs Orchrd into the user profile and creates three user
-services: `orchrd.service`, `orchrd-tts.service`, and, by default,
-`orchrd-herdr.service`. To use an independently managed Herdr server:
+The module installs Orchrd into the user profile and creates two user services:
+
+- `orchrd.service` owns the conversation loop, Voxtype integration, Herdr
+  monitoring, persistent state, and D-Bus API used by the extension.
+- `orchrd-tts.service` keeps Pocket TTS loaded and serializes audio playback.
+
+Orchrd discovers running Herdr sessions but does not start, stop, or monitor
+unselected sessions.
+
+If you prefer an always-running dedicated fallback session, enable the optional
+Herdr service and give it a name:
 
 ```nix
-services.orchrd.enableHerdrServer = false;
+services.orchrd = {
+  enableHerdrServer = true;
+  herdrSession = "orchrd";
+};
 ```
+
+Select that fallback from the GNOME panel after it starts. Picker choices are
+remembered in Orchrd's local database.
 
 ### 2. Create the configuration file
 
@@ -216,19 +249,30 @@ gnome-extensions enable "$orchrd_uuid"
 ```bash
 systemctl --user status orchrd.service
 systemctl --user status orchrd-tts.service
-systemctl --user status orchrd-herdr.service
 orchrdctl status
 ```
+
+If you enabled the optional dedicated server, also check
+`systemctl --user status orchrd-herdr.service`.
 
 ## Using Orchrd
 
 The default push-to-talk key is <kbd>Print Screen</kbd>. Hold it while speaking
 and release it to transcribe and route the request.
 
-The panel shows the controller state and each project session on its own row.
-It also provides:
+The panel has a picker containing currently running Herdr sessions. Orchrd
+connects to and monitors only the selected session; changing the selection does
+not stop, modify, or inspect the others. Existing Codex panes in the selected
+session are associated with discovered projects using their working directory,
+so no Herdr window needs to be committed to a project repository.
 
-- **Open Herdr** to open the Orchrd Herdr session in GNOME Console
+The panel shows the controller state and each associated project agent on its
+own row. It also provides:
+
+- **Herdr session** to choose the instance Orchrd may interact with
+- **Open Herdr** to open the selected session in GNOME Console
+- **Resume last Herdr session** to reselect and attach to the most recently used
+  named Herdr instance
 - **Auto speak results** to switch between immediate speech and muted notifications
 - **Repeat last response** to hear the last thing Orchrd spoke again
 
@@ -239,6 +283,12 @@ and remains available after a service restart. If multiple spoken responses
 arrive together, Pocket TTS plays them in order without interrupting either one.
 Starting push-to-talk is the explicit interruption: it stops current speech and
 clears any audio still waiting to play.
+
+The panel's **Resume last Herdr session** is different from asking Orchrd to
+“resume the latest session for this project.” The panel action reattaches the
+last Herdr instance; the spoken request starts a Codex agent with Herdr's
+`resume --last` integration. Starting a new project session creates an empty
+Codex session and does not create a meaningless task run.
 
 Example requests:
 
@@ -267,6 +317,8 @@ orchrdctl dispatch "what is Orchrd working on?"
 orchrdctl mode auto
 orchrdctl mode muted
 orchrdctl repeat-last
+orchrdctl herdr-session work
+orchrdctl resume-last-herdr
 orchrdctl start
 orchrdctl stop
 orchrdctl cancel
@@ -280,10 +332,16 @@ Follow controller logs, including failed conversational tool calls:
 journalctl --user -u orchrd.service -f
 ```
 
+Every conversational tool call is logged as selected and then as succeeded or
+failed. Completion summarization is a separate model call. If that call returns
+invalid output, the coding task remains complete and Orchrd records a short
+fallback message rather than treating the task itself as failed.
+
 Inspect the other runtime services:
 
 ```bash
 journalctl --user -u orchrd-tts.service -f
+# Only when the optional dedicated service is enabled:
 journalctl --user -u orchrd-herdr.service -f
 ```
 

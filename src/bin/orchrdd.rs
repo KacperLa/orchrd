@@ -30,6 +30,18 @@ impl OrchrdApi {
     async fn repeat_last(&self) -> fdo::Result<()> {
         self.controller.repeat_last().await.map_err(fdo_err)
     }
+    async fn select_herdr_session(&self, name: &str) -> fdo::Result<()> {
+        self.controller
+            .select_herdr_session(name)
+            .await
+            .map_err(fdo_err)
+    }
+    async fn resume_last_herdr_session(&self) -> fdo::Result<String> {
+        self.controller
+            .resume_last_herdr_session()
+            .await
+            .map_err(fdo_err)
+    }
     async fn set_announcement_mode(&self, mode: &str) -> fdo::Result<()> {
         let mode = match mode {
             "auto" => AnnouncementMode::Auto,

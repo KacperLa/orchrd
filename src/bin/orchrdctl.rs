@@ -18,6 +18,24 @@ async fn main() -> Result<()> {
         "stop" => proxy.call::<_, _, ()>("StopListening", &()).await?,
         "cancel" => proxy.call::<_, _, ()>("CancelListening", &()).await?,
         "repeat-last" => proxy.call::<_, _, ()>("RepeatLast", &()).await?,
+        "herdr-session" => {
+            let name = args
+                .get(1)
+                .ok_or_else(|| anyhow::anyhow!("herdr-session requires a running session name"))?;
+            proxy
+                .call::<_, _, ()>("SelectHerdrSession", &(name.as_str(),))
+                .await?
+        }
+        "resume-last-herdr" => {
+            let name: String = proxy.call("ResumeLastHerdrSession", &()).await?;
+            let status = tokio::process::Command::new("herdr")
+                .args(["session", "attach", &name])
+                .status()
+                .await?;
+            if !status.success() {
+                bail!("herdr session attach {name} failed with {status}")
+            }
+        }
         "mode" => {
             let mode = args
                 .get(1)
@@ -43,7 +61,7 @@ async fn main() -> Result<()> {
                 .call::<_, _, ()>("DispatchText", &(text.as_str(),))
                 .await?
         }
-        _ => bail!("usage: orchrdctl [status|start|stop|cancel|repeat-last|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
+        _ => bail!("usage: orchrdctl [status|start|stop|cancel|repeat-last|herdr-session NAME|resume-last-herdr|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
     };
     Ok(())
 }

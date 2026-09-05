@@ -14,12 +14,12 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 const BUS_NAME = 'io.github.kacper.Orchrd1';
 const OBJECT_PATH = '/io/github/kacper/Orchrd1';
 const IFACE = 'io.github.kacper.Orchrd1';
-const HERDR_SESSION = 'orchrd';
-
 const OrchrdProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
   <interface name="${IFACE}">
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
     <method name="RepeatLast"/>
+    <method name="SelectHerdrSession"><arg type="s" direction="in"/></method>
+    <method name="ResumeLastHerdrSession"><arg type="s" direction="out"/></method>
     <method name="SetAnnouncementMode"><arg type="s" direction="in"/></method>
     <method name="Approve"><arg type="s" direction="in"/><arg type="b" direction="in"/></method>
     <method name="GetSnapshot"><arg type="s" direction="out"/></method>
@@ -45,13 +45,19 @@ class OrchrdIndicator extends PanelMenu.Button {
 
         this._status = new PopupMenu.PopupMenuItem('Orchrd: connecting', {reactive: false});
         this.menu.addMenuItem(this._status);
+        this._sessionPicker = new PopupMenu.PopupSubMenuMenuItem('Herdr session');
+        this.menu.addMenuItem(this._sessionPicker);
         this._agents = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._agents);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const openHerdr = new PopupMenu.PopupImageMenuItem('Open Herdr', 'utilities-terminal-symbolic');
-        openHerdr.connect('activate', () => extension.openHerdr());
-        this.menu.addMenuItem(openHerdr);
+        this._openHerdr = new PopupMenu.PopupImageMenuItem('Open Herdr', 'utilities-terminal-symbolic');
+        this._openHerdr.connect('activate', () => extension.openHerdr());
+        this.menu.addMenuItem(this._openHerdr);
+
+        this._resumeHerdr = new PopupMenu.PopupImageMenuItem('Resume last Herdr session', 'media-playback-start-symbolic');
+        this._resumeHerdr.connect('activate', () => extension.resumeLastHerdrSession());
+        this.menu.addMenuItem(this._resumeHerdr);
 
         this._auto = new PopupMenu.PopupSwitchMenuItem('Auto speak results', extension.settings.get_boolean('auto-speak'));
         this._auto.connect('toggled', (_item, enabled) => extension.setAutoSpeak(enabled));
@@ -65,6 +71,26 @@ class OrchrdIndicator extends PanelMenu.Button {
     update(snapshot) {
         const project = snapshot.active_project ? ` · ${snapshot.active_project}` : '';
         this._status.label.text = `${snapshot.state}${project}`;
+        const selected = snapshot.selected_herdr_session ?? null;
+        this._openHerdr.setSensitive(Boolean(selected));
+        this._resumeHerdr.setSensitive(Boolean(snapshot.last_herdr_session));
+        this._sessionPicker.label.text = selected ? `Herdr: ${selected}` : 'Choose Herdr session';
+        this._sessionPicker.menu.removeAll();
+        const sessions = (snapshot.herdr_sessions ?? []).filter(session => session.running);
+        if (sessions.length) {
+            for (const session of sessions) {
+                const item = new PopupMenu.PopupMenuItem(session.name);
+                if (session.name === selected)
+                    item.setOrnament(PopupMenu.Ornament.DOT);
+                item.connect('activate', () => this._extension.selectHerdrSession(session.name));
+                this._sessionPicker.menu.addMenuItem(item);
+            }
+        } else {
+            this._sessionPicker.menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                'No running sessions',
+                {reactive: false}
+            ));
+        }
         const agents = snapshot.agents ?? [];
         this._agents.removeAll();
         if (agents.length) {
@@ -154,20 +180,50 @@ export default class OrchrdExtension extends Extension {
     startListening() { this._call('StartListening'); }
     stopListening() { this._call('StopListening'); }
     repeatLast() { this._call('RepeatLast'); }
+    selectHerdrSession(name) {
+        const current = this._snapshot?.selected_herdr_session;
+        const active = (this._snapshot?.agents ?? []).some(
+            agent => agent.status === 'working' || agent.status === 'blocked'
+        );
+        if (current && current !== name && active)
+            Main.notify('Orchrd', `${current} still has an active agent and will no longer be monitored.`);
+        this._call('SelectHerdrSession', name);
+    }
 
-    openHerdr() {
+    openHerdr(session = null) {
+        session ??= this._snapshot?.selected_herdr_session;
+        if (!session) {
+            Main.notifyError('Orchrd', 'Choose a Herdr session first');
+            return;
+        }
         try {
+            const consoleCommand = GLib.find_program_in_path('kgx') ?? '/run/current-system/sw/bin/kgx';
+            const herdrCommand = GLib.find_program_in_path('herdr') ?? '/etc/profiles/per-user/kacper/bin/herdr';
             Gio.Subprocess.new([
-                '/run/current-system/sw/bin/kgx',
-                '--title=Orchrd · Herdr',
+                consoleCommand,
+                `--title=Orchrd · Herdr · ${session}`,
                 '--',
-                '/etc/profiles/per-user/kacper/bin/herdr',
-                '--session',
-                HERDR_SESSION,
+                herdrCommand,
+                'session',
+                'attach',
+                session,
             ], Gio.SubprocessFlags.NONE);
         } catch (error) {
             Main.notifyError('Orchrd', `Could not open Herdr: ${error.message}`);
         }
+    }
+
+    resumeLastHerdrSession() {
+        if (!this._proxy?.g_name_owner) {
+            this._setOffline('Service unavailable');
+            return;
+        }
+        this._proxy.ResumeLastHerdrSessionRemote((result, error) => {
+            if (error)
+                Main.notifyError('Orchrd', error.message);
+            else
+                this.openHerdr(result[0]);
+        });
     }
 
     setAutoSpeak(enabled) {
@@ -197,12 +253,15 @@ export default class OrchrdExtension extends Extension {
     }
 
     _applySnapshot(json) {
-        try { this._indicator.update(JSON.parse(json)); }
+        try {
+            this._snapshot = JSON.parse(json);
+            this._indicator.update(this._snapshot);
+        }
         catch (error) { console.error(`Orchrd snapshot: ${error}`); }
     }
 
     _setOffline(message) {
-        this._indicator?.update({state: 'offline', agents: [], message});
+        this._indicator?.update({state: 'offline', agents: [], herdr_sessions: [], message});
     }
 
     _ding(eventId) {
