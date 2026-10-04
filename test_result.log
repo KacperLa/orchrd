@@ -1,0 +1,61 @@
+Checking Rust formatting...
+Running Rust tests...
+
+running 37 tests
+test config::tests::defaults_are_stable ... ok
+test activity::tests::transitions_keep_exact_arguments_and_parent ... ok
+test controller::tests::unknown_approval_menu_fails_closed ... ok
+test config::tests::queued_mode_is_read_as_muted_for_compatibility ... ok
+test config::tests::removed_options_are_rejected_and_transcription_timeout_is_explicit ... ok
+test config::tests::speech_provider_config_is_explicit_and_validated ... ok
+test activity::tests::retention_never_discards_pending_operations ... ok
+test herdr::tests::pane_title_is_display_metadata_not_a_routing_identifier ... ok
+test herdr::tests::reads_adoptable_agent_metadata ... ok
+test intent::tests::removes_internal_project_markers ... ok
+test output::tests::subtracts_overlapping_scrollback_and_chrome ... ok
+test stt::tests::wav_header_and_bounds ... ok
+test intent::tests::routing_context_maps_display_names_to_exact_tool_ids ... ok
+test intent::tests::system_prompt_explicitly_routes_agent_requests_to_send_tool ... ok
+test speech_api::tests::missing_credentials_fail_before_network_io ... ok
+test stt::tests::compatible_transcription_uploads_wav_and_returns_clean_text ... ok
+test stt::tests::invalid_transcripts_are_errors ... ok
+test coordinator::tests::addressed_agent_updates_context_without_changing_status ... ok
+test coordinator::tests::busy_agent_delivery_does_not_claim_new_task_started ... ok
+test coordinator::tests::activity_is_scoped_and_delivery_does_not_change_agent_status ... ok
+test speech_api::tests::provider_errors_do_not_echo_private_bodies ... ok
+test coordinator::tests::stale_reads_cannot_change_last_addressed_agent ... ok
+test coordinator::tests::timeout_and_disappearance_do_not_claim_approval ... ok
+test coordinator::tests::approval_requires_transition_and_receipt_in_either_order ... ok
+test coordinator::tests::failed_response_capture_recovers_baseline_before_next_response ... ok
+test tts::tests::remote_cancel_interrupts_pending_request_without_pocket_worker ... ok
+test tts::tests::compatible_tts_requests_pcm_and_rejects_json ... ok
+test tts::tests::audio_reaches_player_before_http_response_finishes ... ok
+test tts::tests::cleans_markdown ... ok
+test intent::tests::hides_tokens ... ok
+test tts::tests::enforces_short_plain_speech ... ok
+test db::tests::response_queue_and_history_survive_restart_without_duplicates ... ok
+test db::tests::interrupted_delivery_is_recorded_once_as_uncertain ... ok
+test coordinator::tests::session_switch_keeps_old_history_but_suppresses_old_speech ... ok
+test coordinator::tests::conversational_reply_cannot_clear_herdr_state ... ok
+test coordinator::tests::responses_are_captured_once_without_waiting_for_summary ... ok
+test controller::tests::speech_waits_for_each_playback_receipt_and_skips_stale_selection ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test tests::lag_requests_resync_and_receiver_remains_usable ... ok
+test tests::supervisor_fails_on_unexpected_task_exit_or_panic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Running Clippy...
+Running GNOME extension tests...
+Extension lifecycle checks passed
+Running TTS worker tests...
+Running GTK viewer tests in an isolated display and D-Bus session...

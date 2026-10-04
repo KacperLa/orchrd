@@ -9,5 +9,9 @@
       <default>false</default>
       <summary>Automatically speak completed agent results</summary>
     </key>
+    <key name="interface-sounds" type="b">
+      <default>true</default>
+      <summary>Play short sounds for voice interaction state changes</summary>
+    </key>
   </schema>
 </schemalist>

@@ -15,7 +15,7 @@ pub struct Voxtype {
     command: String,
     state_file: PathBuf,
     runtime_dir: PathBuf,
-    max_duration: Duration,
+    transcription_timeout: Duration,
 }
 
 impl Voxtype {
@@ -23,13 +23,13 @@ impl Voxtype {
         command: String,
         state_file: PathBuf,
         runtime_dir: PathBuf,
-        max_seconds: u64,
+        transcription_timeout_seconds: u64,
     ) -> Self {
         Self {
             command,
             state_file,
             runtime_dir,
-            max_duration: Duration::from_secs(max_seconds),
+            transcription_timeout: Duration::from_secs(transcription_timeout_seconds),
         }
     }
     async fn state(&self) -> String {
@@ -47,29 +47,39 @@ impl Voxtype {
         fs::create_dir_all(&self.runtime_dir).await?;
         let output = self.runtime_dir.join(format!("utterance-{id}.txt"));
         let _ = fs::remove_file(&output).await;
-        let status = Command::new(&self.command)
-            .args(["record", "start"])
-            .arg(format!("--file={}", output.display()))
-            .stdin(Stdio::null())
-            .status()
-            .await
-            .context("start Voxtype recording")?;
+        let status = tokio::time::timeout(
+            Duration::from_secs(10),
+            Command::new(&self.command)
+                .kill_on_drop(true)
+                .args(["record", "start"])
+                .arg(format!("--file={}", output.display()))
+                .stdin(Stdio::null())
+                .status(),
+        )
+        .await
+        .context("Voxtype start command timed out")?
+        .context("start Voxtype recording")?;
         if !status.success() {
             bail!("voxtype record start exited with {status}");
         }
         Ok(output)
     }
     pub async fn stop_and_wait(&self, output: &Path) -> Result<String> {
-        let status = Command::new(&self.command)
-            .args(["record", "stop"])
-            .stdin(Stdio::null())
-            .status()
-            .await
-            .context("stop Voxtype recording")?;
+        let status = tokio::time::timeout(
+            Duration::from_secs(10),
+            Command::new(&self.command)
+                .kill_on_drop(true)
+                .args(["record", "stop"])
+                .stdin(Stdio::null())
+                .status(),
+        )
+        .await
+        .context("Voxtype stop command timed out")?
+        .context("stop Voxtype recording")?;
         if !status.success() {
             bail!("voxtype record stop exited with {status}");
         }
-        let deadline = Instant::now() + self.max_duration;
+        let deadline = Instant::now() + self.transcription_timeout;
         loop {
             if output.exists() {
                 let text = fs::read_to_string(output).await?;
@@ -87,10 +97,15 @@ impl Voxtype {
         }
     }
     pub async fn cancel(&self) -> Result<()> {
-        let status = Command::new(&self.command)
-            .args(["record", "cancel"])
-            .status()
-            .await?;
+        let status = tokio::time::timeout(
+            Duration::from_secs(10),
+            Command::new(&self.command)
+                .kill_on_drop(true)
+                .args(["record", "cancel"])
+                .status(),
+        )
+        .await
+        .context("Voxtype cancel command timed out")??;
         if !status.success() {
             bail!("voxtype cancel exited with {status}")
         };

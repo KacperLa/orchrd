@@ -18,8 +18,6 @@ const OrchrdProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
   <interface name="${IFACE}">
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
     <method name="RepeatLast"/>
-    <method name="SelectHerdrSession"><arg type="s" direction="in"/></method>
-    <method name="ResumeLastHerdrSession"><arg type="s" direction="out"/></method>
     <method name="SetAnnouncementMode"><arg type="s" direction="in"/></method>
     <method name="Approve"><arg type="s" direction="in"/><arg type="b" direction="in"/></method>
     <method name="GetSnapshot"><arg type="s" direction="out"/></method>
@@ -45,23 +43,31 @@ class OrchrdIndicator extends PanelMenu.Button {
 
         this._status = new PopupMenu.PopupMenuItem('Orchrd: connecting', {reactive: false});
         this.menu.addMenuItem(this._status);
-        this._sessionPicker = new PopupMenu.PopupSubMenuMenuItem('Herdr session');
-        this.menu.addMenuItem(this._sessionPicker);
         this._agents = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._agents);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        this._openHerdr = new PopupMenu.PopupImageMenuItem('Open Herdr', 'utilities-terminal-symbolic');
-        this._openHerdr.connect('activate', () => extension.openHerdr());
-        this.menu.addMenuItem(this._openHerdr);
-
-        this._resumeHerdr = new PopupMenu.PopupImageMenuItem('Resume last Herdr session', 'media-playback-start-symbolic');
-        this._resumeHerdr.connect('activate', () => extension.resumeLastHerdrSession());
-        this.menu.addMenuItem(this._resumeHerdr);
+        const activity = new PopupMenu.PopupImageMenuItem('Open activity', 'view-list-symbolic');
+        activity.connect('activate', () => {
+            try {
+                Gio.Subprocess.new(['orchrd-activity'], Gio.SubprocessFlags.NONE);
+            } catch (error) {
+                Main.notifyError('Could not open Orchrd activity', error.message);
+            }
+        });
+        this.menu.addMenuItem(activity);
 
         this._auto = new PopupMenu.PopupSwitchMenuItem('Auto speak results', extension.settings.get_boolean('auto-speak'));
         this._auto.connect('toggled', (_item, enabled) => extension.setAutoSpeak(enabled));
         this.menu.addMenuItem(this._auto);
+
+        this._sounds = new PopupMenu.PopupSwitchMenuItem(
+            'Interaction sounds',
+            extension.settings.get_boolean('interface-sounds')
+        );
+        this._sounds.connect('toggled', (_item, enabled) =>
+            extension.settings.set_boolean('interface-sounds', enabled));
+        this.menu.addMenuItem(this._sounds);
 
         const repeat = new PopupMenu.PopupMenuItem('Repeat last response');
         repeat.connect('activate', () => extension.repeatLast());
@@ -69,34 +75,14 @@ class OrchrdIndicator extends PanelMenu.Button {
     }
 
     update(snapshot) {
-        const project = snapshot.active_project ? ` · ${snapshot.active_project}` : '';
-        this._status.label.text = `${snapshot.state}${project}`;
-        const selected = snapshot.selected_herdr_session ?? null;
-        this._openHerdr.setSensitive(Boolean(selected));
-        this._resumeHerdr.setSensitive(Boolean(snapshot.last_herdr_session));
-        this._sessionPicker.label.text = selected ? `Herdr: ${selected}` : 'Choose Herdr session';
-        this._sessionPicker.menu.removeAll();
-        const sessions = (snapshot.herdr_sessions ?? []).filter(session => session.running);
-        if (sessions.length) {
-            for (const session of sessions) {
-                const item = new PopupMenu.PopupMenuItem(session.name);
-                if (session.name === selected)
-                    item.setOrnament(PopupMenu.Ornament.DOT);
-                item.connect('activate', () => this._extension.selectHerdrSession(session.name));
-                this._sessionPicker.menu.addMenuItem(item);
-            }
-        } else {
-            this._sessionPicker.menu.addMenuItem(new PopupMenu.PopupMenuItem(
-                'No running sessions',
-                {reactive: false}
-            ));
-        }
+        const agent = snapshot.active_agent ? ` · ${snapshot.active_agent}` : '';
+        this._status.label.text = `${snapshot.state}${agent}`;
         const agents = snapshot.agents ?? [];
         this._agents.removeAll();
         if (agents.length) {
             for (const agent of agents) {
                 this._agents.addMenuItem(new PopupMenu.PopupMenuItem(
-                    `${agent.project_id}: ${agent.status}`,
+                    `${agent.display_name || agent.agent_name}: ${agent.status}`,
                     {reactive: false}
                 ));
             }
@@ -115,8 +101,13 @@ class OrchrdIndicator extends PanelMenu.Button {
 
 export default class OrchrdExtension extends Extension {
     enable() {
+        this._lifetime = {};
+        this._proxySignals = [];
+        this._ownerSignal = null;
+        this._snapshot = null;
         this.settings = this.getSettings();
         this._pressed = false;
+        this._cueTimeouts = new Set();
         this._indicator = new OrchrdIndicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
         this._connectProxy();
@@ -128,32 +119,59 @@ export default class OrchrdExtension extends Extension {
 
     disable() {
         Main.wm.removeKeybinding('push-to-talk');
-        this._proxy?.disconnectSignal?.(this._stateSignal);
+        if (this._pressed)
+            this._call('CancelListening');
+        this._pressed = false;
+        this._lifetime = null;
+        for (const timeout of this._cueTimeouts ?? [])
+            GLib.source_remove(timeout);
+        this._cueTimeouts?.clear();
+        for (const signal of this._proxySignals ?? [])
+            this._proxy?.disconnectSignal(signal);
+        this._proxySignals = [];
+        if (this._ownerSignal)
+            this._proxy?.disconnect(this._ownerSignal);
+        this._ownerSignal = null;
+        this._proxy?.run_dispose();
         this._proxy = null;
         this._indicator?.destroy();
         this._indicator = null;
         this.settings = null;
+        this._snapshot = null;
     }
 
     _connectProxy() {
-        this._proxy = new OrchrdProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, proxy => {
-            if (proxy instanceof Error) {
-                this._setOffline(proxy.message);
+        const lifetime = this._lifetime;
+        this._proxy = new OrchrdProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
+            if (this._lifetime !== lifetime) {
+                proxy.run_dispose();
                 return;
             }
-            this._stateSignal = this._proxy.connectSignal('StateChanged', (_p, _sender, [json]) => this._applySnapshot(json));
-            this._proxy.connectSignal('CompletionFinished', (_p, _sender, [project, speech]) => {
+            if (error) {
+                this._setOffline(error.message);
+                return;
+            }
+            const connect = (name, callback) => {
+                this._proxySignals.push(proxy.connectSignal(name, (...args) => {
+                    if (this._lifetime === lifetime)
+                        callback(...args);
+                }));
+            };
+            connect('StateChanged', (_p, _sender, [json]) => this._applySnapshot(json));
+            connect('CompletionFinished', (_p, _sender, [agent_name, speech]) => {
                 if (!this.settings.get_boolean('auto-speak'))
                     this._ding('complete');
-                Main.notify(`Orchrd · ${project || 'Agent finished'}`, speech);
+                Main.notify(`Orchrd · ${agent_name || 'Agent finished'}`, speech);
             });
-            this._proxy.connectSignal('ApprovalRequired', (_p, _sender, [_id, message]) => {
+            connect('ApprovalRequired', (_p, _sender, [_id, message]) => {
                 this._ding('dialog-warning');
                 Main.notify('Orchrd approval required', message);
             });
-            this._proxy.connectSignal('Error', (_p, _sender, [message]) => Main.notifyError('Orchrd', message));
-            this._proxy.connect('notify::g-name-owner', () => {
-                if (this._proxy.g_name_owner) {
+            connect('Error', (_p, _sender, [message]) => Main.notifyError('Orchrd', message));
+            this._ownerSignal = proxy.connect('notify::g-name-owner', () => {
+                if (this._lifetime !== lifetime)
+                    return;
+                if (proxy.g_name_owner) {
                     this._syncMode();
                     this._refresh();
                 } else {
@@ -180,52 +198,6 @@ export default class OrchrdExtension extends Extension {
     startListening() { this._call('StartListening'); }
     stopListening() { this._call('StopListening'); }
     repeatLast() { this._call('RepeatLast'); }
-    selectHerdrSession(name) {
-        const current = this._snapshot?.selected_herdr_session;
-        const active = (this._snapshot?.agents ?? []).some(
-            agent => agent.status === 'working' || agent.status === 'blocked'
-        );
-        if (current && current !== name && active)
-            Main.notify('Orchrd', `${current} still has an active agent and will no longer be monitored.`);
-        this._call('SelectHerdrSession', name);
-    }
-
-    openHerdr(session = null) {
-        session ??= this._snapshot?.selected_herdr_session;
-        if (!session) {
-            Main.notifyError('Orchrd', 'Choose a Herdr session first');
-            return;
-        }
-        try {
-            const consoleCommand = GLib.find_program_in_path('kgx') ?? '/run/current-system/sw/bin/kgx';
-            const herdrCommand = GLib.find_program_in_path('herdr') ?? '/etc/profiles/per-user/kacper/bin/herdr';
-            Gio.Subprocess.new([
-                consoleCommand,
-                `--title=Orchrd · Herdr · ${session}`,
-                '--',
-                herdrCommand,
-                'session',
-                'attach',
-                session,
-            ], Gio.SubprocessFlags.NONE);
-        } catch (error) {
-            Main.notifyError('Orchrd', `Could not open Herdr: ${error.message}`);
-        }
-    }
-
-    resumeLastHerdrSession() {
-        if (!this._proxy?.g_name_owner) {
-            this._setOffline('Service unavailable');
-            return;
-        }
-        this._proxy.ResumeLastHerdrSessionRemote((result, error) => {
-            if (error)
-                Main.notifyError('Orchrd', error.message);
-            else
-                this.openHerdr(result[0]);
-        });
-    }
-
     setAutoSpeak(enabled) {
         this.settings.set_boolean('auto-speak', enabled);
         this._call('SetAnnouncementMode', enabled ? 'auto' : 'muted');
@@ -238,15 +210,19 @@ export default class OrchrdExtension extends Extension {
             this._setOffline('Service unavailable');
             return;
         }
+        const lifetime = this._lifetime;
         const remote = this._proxy[`${method}Remote`];
         remote.call(this._proxy, ...args, (_result, error) => {
-            if (error)
+            if (this._lifetime === lifetime && error)
                 Main.notifyError('Orchrd', error.message);
         });
     }
 
     _refresh() {
+        const lifetime = this._lifetime;
         this._proxy.GetSnapshotRemote((result, error) => {
+            if (this._lifetime !== lifetime)
+                return;
             if (error) this._setOffline(error.message);
             else this._applySnapshot(result[0]);
         });
@@ -254,18 +230,43 @@ export default class OrchrdExtension extends Extension {
 
     _applySnapshot(json) {
         try {
-            this._snapshot = JSON.parse(json);
+            const snapshot = JSON.parse(json);
+            this._playStateCue(this._snapshot?.state, snapshot.state);
+            this._snapshot = snapshot;
             this._indicator.update(this._snapshot);
         }
         catch (error) { console.error(`Orchrd snapshot: ${error}`); }
     }
 
     _setOffline(message) {
-        this._indicator?.update({state: 'offline', agents: [], herdr_sessions: [], message});
+        this._indicator?.update({state: 'offline', agents: [], message});
     }
 
     _ding(eventId) {
         try { global.display.get_sound_player().play_from_theme(eventId, 'Orchrd notification', null); }
         catch (error) { console.debug(`Orchrd sound unavailable: ${error}`); }
+    }
+
+    _playStateCue(previous, current) {
+        if (!previous || previous === current || !this.settings?.get_boolean('interface-sounds'))
+            return;
+
+        if (current === 'transcribing') {
+            this._ding('message');
+        } else if (current === 'routing') {
+            this._ding('dialog-information');
+            this._queueCue('audio-volume-change', 180);
+            this._queueCue('audio-volume-change', 360);
+        }
+    }
+
+    _queueCue(eventId, delayMs) {
+        const timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delayMs, () => {
+            this._cueTimeouts.delete(timeout);
+            if (this.settings?.get_boolean('interface-sounds'))
+                this._ding(eventId);
+            return GLib.SOURCE_REMOVE;
+        });
+        this._cueTimeouts.add(timeout);
     }
 }

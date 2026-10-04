@@ -4,14 +4,12 @@
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
     <method name="DispatchText"><arg name="text" type="s" direction="in"/></method>
     <method name="RepeatLast"/>
-    <method name="SelectHerdrSession"><arg name="name" type="s" direction="in"/></method>
-    <method name="ResumeLastHerdrSession"><arg name="name" type="s" direction="out"/></method>
     <method name="SetAnnouncementMode"><arg name="mode" type="s" direction="in"/></method>
     <method name="Approve"><arg name="id" type="s" direction="in"/><arg name="approve" type="b" direction="in"/></method>
     <method name="GetSnapshot"><arg name="json" type="s" direction="out"/></method>
     <signal name="StateChanged"><arg name="json" type="s"/></signal>
     <signal name="TranscriptReady"><arg name="text" type="s"/></signal>
-    <signal name="CompletionFinished"><arg name="project" type="s"/><arg name="speech" type="s"/></signal>
+    <signal name="CompletionFinished"><arg name="agent_name" type="s"/><arg name="speech" type="s"/></signal>
     <signal name="ApprovalRequired"><arg name="id" type="s"/><arg name="message" type="s"/></signal>
     <signal name="Error"><arg name="message" type="s"/></signal>
   </interface>

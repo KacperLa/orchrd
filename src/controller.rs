@@ -1,1186 +1,1072 @@
+use crate::activity::Activity;
+pub use crate::coordinator::{Event, Scope, Snapshot};
 use crate::{
-    config::{AnnouncementMode, Config, Project},
-    db::{AgentSession, Database},
-    herdr::{agent_infos, agent_states, HerdrClient, HerdrSessionInfo},
+    agent_bridge::AgentBridge,
+    config::{AnnouncementMode, Config},
+    coordinator::{Coordinator, Message, OperationKind, Speech},
+    db::Database,
     intent::{redact, IntentClient, ToolCall},
-    tts::{concise_speech, TtsClient},
-    voxtype::Voxtype,
+    routing::{Operation, Router},
+    stt::SttClient,
+    tts::TtsClient,
 };
 use anyhow::{bail, Context, Result};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
-    sync::{broadcast, Mutex, RwLock},
-    time::{sleep, Instant},
+    sync::{broadcast, mpsc, oneshot, watch, Mutex, Notify},
+    task::JoinSet,
+    time::{sleep, timeout},
 };
 use uuid::Uuid;
 
-const APPROVAL_CONFIRM_TIMEOUT: Duration = Duration::from_secs(3);
-const APPROVAL_CONFIRM_POLL_INTERVAL: Duration = Duration::from_millis(100);
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Snapshot {
-    pub state: String,
-    pub active_project: Option<String>,
-    pub agents: Vec<AgentSession>,
-    pub herdr_sessions: Vec<HerdrSessionInfo>,
-    pub selected_herdr_session: Option<String>,
-    pub last_herdr_session: Option<String>,
-    pub announcement_mode: AnnouncementMode,
-    pub message: Option<String>,
-}
-#[derive(Debug, Clone)]
-pub enum Event {
-    Snapshot(Snapshot),
-    Transcript(String),
-    Completion { project: String, speech: String },
-    Approval { id: String, message: String },
-    Error(String),
-}
 struct Recording {
+    scope: Scope,
+    token: String,
     path: PathBuf,
+}
+struct Turn {
+    scope: Scope,
+    token: String,
+    text: Option<String>,
+    path: Option<PathBuf>,
+    completed: Option<oneshot::Sender<Result<()>>>,
+}
+struct Runtime {
+    coordinator: Coordinator,
+    messages: mpsc::UnboundedReceiver<Message>,
+    turns: mpsc::UnboundedReceiver<Turn>,
+    speech: mpsc::UnboundedReceiver<Speech>,
 }
 pub struct Controller {
     pub config: Arc<Config>,
     db: Arc<Database>,
-    voxtype: Voxtype,
-    herdr: HerdrClient,
+    agents: AgentBridge,
     intent: IntentClient,
+    router: Router,
     tts: TtsClient,
-    projects: RwLock<Vec<Project>>,
-    state: RwLock<Snapshot>,
-    recording: Mutex<Option<Recording>>,
+    stt: SttClient,
+    messages: mpsc::UnboundedSender<Message>,
+    turns: mpsc::UnboundedSender<Turn>,
+    snapshots: watch::Receiver<Snapshot>,
     events: broadcast::Sender<Event>,
+    summaries: Arc<Notify>,
+    recording: Mutex<Option<Recording>>,
+    runtime: Mutex<Option<Runtime>>,
 }
 impl Controller {
     pub async fn new(config: Config) -> Result<Arc<Self>> {
         tokio::fs::create_dir_all(Config::runtime_dir()).await?;
-        let data = Config::data_dir()?;
-        tokio::fs::create_dir_all(&data).await?;
-        let db = Arc::new(Database::open(&data.join("orchrd.sqlite3"))?);
-        let projects = config.resolved_projects()?;
-        db.sync_projects(&projects)?;
+        let db = Arc::new(Database::open(&Config::data_dir()?.join("orchrd.sqlite3"))?);
         let mode = db
             .setting("announcement_mode")?
-            .and_then(|v| {
+            .map(|v| {
                 if v == "auto" {
-                    Some(AnnouncementMode::Auto)
-                } else if v == "muted" || v == "queued" {
-                    Some(AnnouncementMode::Muted)
+                    AnnouncementMode::Auto
                 } else {
-                    None
+                    AnnouncementMode::Muted
                 }
             })
             .unwrap_or(config.voice.announcement_mode);
-        let herdr = HerdrClient::new(config.commands.herdr.clone());
-        let herdr_sessions = herdr.list_sessions().await.unwrap_or_default();
-        let last_herdr_session = db.setting("last_herdr_session")?;
-        let selected_herdr_session = db
-            .setting("selected_herdr_session")?
-            .or_else(|| last_herdr_session.clone());
-        let selected_running = selected_herdr_session.as_deref().is_some_and(|selected| {
-            herdr_sessions
-                .iter()
-                .any(|session| session.name == selected && session.running)
-        });
-        let agents = selected_herdr_session
-            .as_deref()
-            .map(|session| db.sessions(session))
-            .transpose()?
-            .unwrap_or_default();
-        let initial_state =
-            reconciled_state(&agents, selected_herdr_session.is_some(), selected_running)
-                .to_owned();
-        let active_project = db.setting("active_project")?;
+        let snapshot = Snapshot::initial(mode);
+        let (snapshots_tx, snapshots) = watch::channel(snapshot.clone());
         let (events, _) = broadcast::channel(128);
-        let c = Arc::new(Self {
-            voxtype: Voxtype::new(
-                config.commands.voxtype.clone(),
-                config.voxtype_state_file(),
-                Config::runtime_dir(),
-                config.voice.max_recording_seconds,
-            ),
-            herdr,
+        let (messages, messages_rx) = mpsc::unbounded_channel();
+        let (turns, turns_rx) = mpsc::unbounded_channel();
+        let (speech, speech_rx) = mpsc::unbounded_channel();
+        let summaries = Arc::new(Notify::new());
+        let coordinator = Coordinator::new(
+            snapshot,
+            db.clone(),
+            events.clone(),
+            snapshots_tx,
+            speech,
+            summaries.clone(),
+        );
+        Ok(Arc::new(Self {
+            agents: AgentBridge::default(),
             intent: IntentClient::new(&config)?,
-            tts: TtsClient::new(config.tts_socket()),
+            router: Router::new(&config.routing)?,
+            tts: TtsClient::from_config(&config)?,
+            stt: SttClient::new(&config)?,
             config: Arc::new(config),
             db,
-            projects: RwLock::new(projects),
-            state: RwLock::new(Snapshot {
-                state: initial_state,
-                active_project,
-                agents,
-                herdr_sessions,
-                selected_herdr_session,
-                last_herdr_session,
-                announcement_mode: mode,
-                message: None,
-            }),
-            recording: Mutex::new(None),
+            messages,
+            turns,
+            snapshots,
             events,
-        });
-        Ok(c)
+            summaries,
+            recording: Mutex::new(None),
+            runtime: Mutex::new(Some(Runtime {
+                coordinator,
+                messages: messages_rx,
+                turns: turns_rx,
+                speech: speech_rx,
+            })),
+        }))
     }
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
         self.events.subscribe()
     }
     pub async fn snapshot(&self) -> Snapshot {
-        self.state.read().await.clone()
+        self.snapshots.borrow().clone()
     }
-    async fn update(&self, state: &str, message: Option<String>) {
-        let mut s = self.state.write().await;
-        s.state = state.into();
-        s.message = message;
-        s.agents = s
-            .selected_herdr_session
-            .as_deref()
-            .and_then(|session| self.db.sessions(session).ok())
-            .unwrap_or_default();
-        let _ = self.events.send(Event::Snapshot(s.clone()));
+    fn send(&self, message: Message) -> Result<()> {
+        self.messages.send(message).context("coordinator stopped")
     }
-    pub async fn select_herdr_session(&self, name: &str) -> Result<()> {
-        let sessions = self.herdr.list_sessions().await?;
-        if !sessions
-            .iter()
-            .any(|session| session.name == name && session.running)
-        {
-            bail!("Herdr session {name} is not running")
-        }
-        self.db.set_setting("selected_herdr_session", name)?;
-        self.db.set_setting("last_herdr_session", name)?;
-        {
-            let mut state = self.state.write().await;
-            state.herdr_sessions = sessions;
-            state.selected_herdr_session = Some(name.to_owned());
-            state.last_herdr_session = Some(name.to_owned());
-        }
-        self.refresh_live_sessions().await?;
-        self.update_reconciled(Some(format!("Using Herdr session {name}")))
-            .await;
-        Ok(())
+    fn trace(&self, scope: &Scope, activity: Activity) -> Result<()> {
+        self.send(Message::Activity {
+            scope: scope.clone(),
+            activity,
+        })
     }
-    pub async fn resume_last_herdr_session(&self) -> Result<String> {
-        let name = self
-            .state
-            .read()
-            .await
-            .last_herdr_session
-            .clone()
-            .context("No previous Herdr session")?;
-        self.db.set_setting("selected_herdr_session", &name)?;
-        self.state.write().await.selected_herdr_session = Some(name.clone());
-        self.update(
-            "session_unavailable",
-            Some(format!("Resuming Herdr session {name}")),
+    async fn ask<T>(&self, make: impl FnOnce(oneshot::Sender<Result<T>>) -> Message) -> Result<T> {
+        let (tx, rx) = oneshot::channel();
+        self.send(make(tx))?;
+        rx.await.context("coordinator stopped before replying")?
+    }
+    async fn context(&self, scope: &Scope) -> Result<Snapshot> {
+        self.ask(|reply| Message::Context {
+            scope: scope.clone(),
+            reply,
+        })
+        .await
+    }
+    async fn voice(&self, scope: &Scope, token: &str, state: &str) -> Result<()> {
+        self.ask(|reply| Message::Voice {
+            scope: scope.clone(),
+            token: token.into(),
+            state: state.into(),
+            reply,
+        })
+        .await?;
+        self.trace(
+            scope,
+            Activity::new(token, "utterance", state, false, json!({})),
         )
-        .await;
-        Ok(name)
     }
-    async fn selected_herdr_session(&self) -> Result<String> {
-        self.state
-            .read()
-            .await
-            .selected_herdr_session
-            .clone()
-            .context("Choose a running Herdr session from the Orchrd menu")
+    async fn record(
+        &self,
+        scope: &Scope,
+        role: &str,
+        agent: Option<&str>,
+        kind: &str,
+        content: &str,
+    ) -> Result<()> {
+        self.ask(|reply| Message::Record {
+            scope: scope.clone(),
+            role: role.into(),
+            agent: agent.map(str::to_owned),
+            kind: kind.into(),
+            content: content.into(),
+            reply,
+        })
+        .await
+    }
+    async fn reply(&self, scope: &Scope, text: &str) -> Result<()> {
+        self.ask(|reply| Message::Reply {
+            scope: scope.clone(),
+            text: text.into(),
+            reply,
+        })
+        .await
+    }
+    pub async fn set_announcement_mode(&self, mode: AnnouncementMode) -> Result<()> {
+        self.ask(|reply| Message::Mode { mode, reply }).await
+    }
+    pub async fn repeat_last(&self) -> Result<()> {
+        self.ask(|reply| Message::Repeat { reply }).await
     }
     pub async fn start_listening(&self) -> Result<()> {
-        let _ = self.tts.cancel().await;
-        let mut r = self.recording.lock().await;
-        if r.is_some() {
+        let mut recording = self.recording.lock().await;
+        if recording.is_some() {
             bail!("already recording")
-        };
-        let id = Uuid::new_v4().to_string();
-        let path = self.voxtype.start(&id).await?;
-        *r = Some(Recording { path });
-        drop(r);
-        self.update("listening", None).await;
-        Ok(())
+        }
+        let scope = self.snapshots.borrow().scope.clone();
+        let token = Uuid::new_v4().to_string();
+        self.voice(&scope, &token, "listening").await?;
+        let _ = self.tts.cancel().await;
+        match self.stt.start(&token).await {
+            Ok(path) => {
+                *recording = Some(Recording { scope, token, path });
+                Ok(())
+            }
+            Err(error) => {
+                self.trace(
+                    &scope,
+                    Activity::new(
+                        &token,
+                        "utterance",
+                        "failed",
+                        true,
+                        json!({"error":error.to_string()}),
+                    ),
+                )?;
+                self.send(Message::VoiceDone { token })?;
+                Err(error)
+            }
+        }
     }
-    pub async fn stop_listening(self: &Arc<Self>) -> Result<()> {
-        let rec = self
+    pub async fn stop_listening(&self) -> Result<()> {
+        let recording = self
             .recording
             .lock()
             .await
             .take()
             .context("not recording")?;
-        self.update("transcribing", None).await;
-        let this = Arc::clone(self);
-        tokio::spawn(async move {
-            match this.voxtype.stop_and_wait(&rec.path).await {
-                Ok(text) => {
-                    let _ = this.events.send(Event::Transcript(text.clone()));
-                    this.update("routing", Some(text.clone())).await;
-                    if let Err(e) = this.dispatch_transcript(&text).await {
-                        this.report_error(e).await
-                    }
-                }
-                Err(e) => this.report_error(e).await,
-            }
-        });
-        Ok(())
+        let _ = self
+            .voice(&recording.scope, &recording.token, "transcribing")
+            .await;
+        if let Err(error) = self.stt.stop_capture().await {
+            let _ = self.stt.cancel().await;
+            self.send(Message::VoiceDone {
+                token: recording.token,
+            })?;
+            return Err(error);
+        }
+        self.turns
+            .send(Turn {
+                scope: recording.scope,
+                token: recording.token,
+                text: None,
+                path: Some(recording.path),
+                completed: None,
+            })
+            .context("conversation worker stopped")
     }
     pub async fn cancel_listening(&self) -> Result<()> {
-        self.recording.lock().await.take();
-        self.voxtype.cancel().await?;
-        self.update_reconciled(Some("Recording cancelled".into()))
-            .await;
+        let mut recording = self.recording.lock().await;
+        if let Some(recording) = recording.take() {
+            let result = self.stt.cancel().await;
+            self.trace(
+                &recording.scope,
+                Activity::new(&recording.token, "utterance", "cancelled", true, json!({})),
+            )?;
+            self.send(Message::VoiceDone {
+                token: recording.token,
+            })?;
+            result?;
+        }
         Ok(())
     }
     pub async fn dispatch_transcript(&self, text: &str) -> Result<()> {
-        let projects = self.config.resolved_projects()?;
-        self.db.sync_projects(&projects)?;
-        *self.projects.write().await = projects.clone();
-        let active = self.state.read().await.active_project.clone();
-        self.db
-            .add_conversation_message("user", text, active.as_deref(), "utterance")?;
-        let sessions = match self.refresh_live_sessions().await {
-            Ok(sessions) => sessions,
-            Err(error) => {
-                tracing::debug!(%error, "could not refresh Herdr state before conversation");
-                match self.state.read().await.selected_herdr_session.as_deref() {
-                    Some(session) => self.db.sessions(session)?,
-                    None => vec![],
+        // Pin the controller lifetime at submission, before this turn waits behind another.
+        let scope = self.snapshots.borrow().scope.clone();
+        let (completed, rx) = oneshot::channel();
+        let token = Uuid::new_v4().to_string();
+        self.trace(
+            &scope,
+            Activity::new(
+                &token,
+                "utterance",
+                "queued",
+                false,
+                json!({"transcript":text}),
+            ),
+        )?;
+        self.turns
+            .send(Turn {
+                scope,
+                token,
+                text: Some(text.into()),
+                path: None,
+                completed: Some(completed),
+            })
+            .context("conversation worker stopped")?;
+        rx.await
+            .context("conversation worker stopped before replying")?
+    }
+    pub async fn resolve_approval(&self, id: &str, approve: bool) -> Result<()> {
+        let target: Value = serde_json::from_str(id).context("invalid approval reference")?;
+        let scope: Scope = serde_json::from_value(target["scope"].clone())?;
+        let agent = string_arg(&target, "agent_name")?;
+        let current = self.context(&scope).await?;
+        if !current.agents.iter().any(|a| {
+            a.name == agent && Some(a.instance_id.as_str()) == target["instance_id"].as_str()
+        }) {
+            bail!("The agent associated with this approval is no longer present")
+        }
+        let result = self
+            .operation(
+                &scope,
+                agent,
+                if approve {
+                    OperationKind::Approve
+                } else {
+                    OperationKind::Deny
+                },
+                json!({"approve":approve}),
+                None,
+            )
+            .await?;
+        if result["outcome"] != "response_observed" {
+            bail!("Response not confirmed: {result}")
+        }
+        Ok(())
+    }
+    pub async fn run(self: Arc<Self>) -> Result<()> {
+        let runtime = self
+            .runtime
+            .lock()
+            .await
+            .take()
+            .context("controller already running")?;
+        let mut tasks = JoinSet::new();
+        tasks.spawn(runtime.coordinator.run(runtime.messages));
+        let agents = self.agents.clone();
+        let bridge_messages = self.messages.clone();
+        tasks.spawn(async move { agents.serve(bridge_messages).await });
+        tasks.spawn(self.clone().poll_worker());
+        tasks.spawn(self.clone().summary_worker());
+        tasks.spawn(self.clone().conversation_worker(runtime.turns));
+        tasks.spawn(Self::speech_worker(
+            self.tts.clone(),
+            self.snapshots.clone(),
+            self.messages.clone(),
+            runtime.speech,
+        ));
+        tasks
+            .join_next()
+            .await
+            .context("no controller workers")?
+            .context("controller worker panicked")??;
+        bail!("controller worker stopped unexpectedly")
+    }
+    async fn poll_worker(self: Arc<Self>) -> Result<()> {
+        loop {
+            let scope = self.snapshots.borrow().scope.clone();
+            let agents = self.agents.snapshot().await;
+            self.send(Message::Polled { scope, agents })?;
+            sleep(Duration::from_millis(200)).await;
+        }
+    }
+    async fn summary_worker(self: Arc<Self>) -> Result<()> {
+        loop {
+            // Create the notification future before querying, avoiding a lost wakeup.
+            let notified = self.summaries.notified();
+            let Some(job) = self.db.next_response()? else {
+                notified.await;
+                continue;
+            };
+            let mut summary = None;
+            let scope = Scope {
+                session: job.session.clone(),
+                epoch: job.epoch.clone(),
+            };
+            self.trace(
+                &scope,
+                Activity::new(&job.id, "summary", "summarizing", false, json!({})),
+            )?;
+            let display_name = self
+                .snapshots
+                .borrow()
+                .agents
+                .iter()
+                .find(|agent| agent.name == job.agent_name)
+                .map(|agent| agent.display_name.clone())
+                .unwrap_or_else(|| job.agent_name.clone());
+            if !job.output.trim().is_empty() {
+                for attempt in 0..2 {
+                    let result = if job.kind == "agent_question"
+                        && serde_json::from_str::<crate::question::Question>(&job.output)
+                            .is_ok_and(|q| q.question_kind == "question")
+                    {
+                        Ok(
+                            serde_json::from_str::<crate::question::Question>(&job.output)?
+                                .speech(),
+                        )
+                    } else if job.kind == "agent_question" {
+                        self.intent
+                            .describe_blocker(&display_name, &job.output)
+                            .await
+                    } else {
+                        self.intent.summarize(&display_name, &job.output).await
+                    };
+                    match result {
+                        Ok(speech) => {
+                            summary = Some(speech);
+                            break;
+                        }
+                        Err(error) => {
+                            self.trace(
+                                &scope,
+                                Activity::new(
+                                    &job.id,
+                                    "summary",
+                                    "retrying",
+                                    false,
+                                    json!({"error":error.to_string(),"attempt":attempt+1}),
+                                ),
+                            )?;
+                            tracing::warn!(id=%job.id,%error,attempt,"summary failed");
+                            if attempt == 0 {
+                                sleep(Duration::from_secs(1)).await;
+                            }
+                        }
+                    }
                 }
             }
-        };
-        let history = self
-            .db
-            .recent_conversation(self.config.conversation.max_messages)?;
-        let mut messages =
-            self.intent
-                .conversation_messages(&history, &projects, &sessions, active.as_deref());
-        for _ in 0..self.config.conversation.max_tool_rounds {
-            let turn = self.intent.next_conversation_turn(&messages).await?;
-            messages.push(turn.message);
-            for call in turn.tool_calls {
-                tracing::info!(
-                    tool = %call.name,
-                    tool_call_id = %call.id,
-                    "conversation tool call selected"
-                );
-                let result = match self.execute_tool(&call, text).await {
-                    Ok(value) => {
-                        tracing::info!(
-                            tool = %call.name,
-                            tool_call_id = %call.id,
-                            "conversation tool call succeeded"
-                        );
-                        if call.name == "speak" {
-                            let speech = string_arg(&value, "speech")?;
-                            return self.reply(speech, "reply").await;
-                        }
-                        if let Some(speech) = successful_action_speech(&call.name, &value) {
-                            return self.reply(&speech, "action_result").await;
-                        }
-                        json!({"ok":true,"result":value})
-                    }
-                    Err(error) => {
-                        let error = redact(&format!("{error:#}"));
-                        tracing::warn!(
-                            tool = %call.name,
-                            tool_call_id = %call.id,
-                            error = %error,
-                            "conversation tool call failed"
-                        );
-                        if let Some(speech) = failed_action_speech(&call.name) {
-                            return self.reply(speech, "action_error").await;
-                        }
-                        json!({"ok":false,"error":error})
-                    }
-                };
-                let mut content = result.to_string();
-                content = content
-                    .chars()
-                    .take(self.config.conversation.max_tool_output_chars)
-                    .collect();
-                messages.push(json!({
-                    "role":"tool",
-                    "tool_call_id":call.id,
-                    "content":content
-                }));
+            let fallback = summary.is_none();
+            let speech = summary.unwrap_or_else(|| {
+                format!(
+                    "{} has new output, but I couldn't summarize it. Open the agent window for details.",
+                    display_name
+                )
+            });
+            self.trace(
+                &scope,
+                Activity::new(
+                    &job.id,
+                    "summary",
+                    "persisting",
+                    false,
+                    json!({"speech":speech,"fallback":fallback}),
+                ),
+            )?;
+            self.ask(|reply| Message::Summarized { job, speech, reply })
+                .await?;
+        }
+    }
+    async fn conversation_worker(
+        self: Arc<Self>,
+        mut turns: mpsc::UnboundedReceiver<Turn>,
+    ) -> Result<()> {
+        while let Some(turn) = turns.recv().await {
+            let result = self.process_turn(&turn).await;
+            self.trace(
+                &turn.scope,
+                Activity::new(
+                    &turn.token,
+                    "utterance",
+                    if result.is_ok() {
+                        "responded"
+                    } else {
+                        "failed"
+                    },
+                    true,
+                    json!({"error":result.as_ref().err().map(|e|e.to_string())}),
+                ),
+            )?;
+            self.send(Message::VoiceDone {
+                token: turn.token.clone(),
+            })?;
+            if let Err(error) = &result {
+                self.send(Message::Error {
+                    scope: turn.scope.clone(),
+                    error: redact(&format!("{error:#}")),
+                })?;
+            }
+            if let Some(completed) = turn.completed {
+                let _ = completed.send(result);
             }
         }
-        bail!("conversation exceeded the configured tool-call limit")
+        bail!("conversation queue closed")
     }
-    async fn execute_tool(&self, call: &ToolCall, transcript: &str) -> Result<Value> {
-        match call.name.as_str() {
-            "speak" => {
-                let speech = string_arg(&call.arguments, "speech")?;
-                let kind = string_arg(&call.arguments, "kind")?;
-                if !matches!(kind, "answer" | "clarification") {
-                    bail!("speak kind must be answer or clarification")
-                }
-                Ok(json!({"speech":speech,"kind":kind}))
-            }
-            "list_projects" => Ok(json!(self
-                .projects
-                .read()
+    async fn process_turn(&self, turn: &Turn) -> Result<()> {
+        let text = match (&turn.text, &turn.path) {
+            (Some(text), _) => text.clone(),
+            (_, Some(path)) => self.stt.stop_and_wait(path).await?,
+            _ => bail!("empty conversation turn"),
+        };
+        self.voice(&turn.scope, &turn.token, "routing").await?;
+        self.trace(
+            &turn.scope,
+            Activity::new(
+                &turn.token,
+                "utterance",
+                "routing",
+                false,
+                json!({"transcript":text}),
+            ),
+        )?;
+        self.record(&turn.scope, "user", None, "utterance", &text)
+            .await?;
+        let context = self.context(&turn.scope).await?;
+        let (decision, evidence) = self
+            .router
+            .classify_with_questions(
+                &text,
+                &context.agents,
+                context.active_agent.as_deref(),
+                self.agents.questions().await,
+            )
+            .await?;
+        self.trace(
+            &turn.scope,
+            Activity::new(
+                format!("{}/routing", turn.token),
+                "routing",
+                "classified",
+                true,
+                json!({"result":evidence}),
+            )
+            .linked(Some(turn.token.clone()), None),
+        )?;
+        if decision.operation == Operation::RepeatLast {
+            return self.repeat_last().await;
+        }
+        if decision.operation == Operation::Clarify {
+            return self
+                .reply(
+                    &turn.scope,
+                    decision
+                        .clarification
+                        .as_deref()
+                        .unwrap_or("Which agent do you mean?"),
+                )
+                .await;
+        }
+        let agent = decision
+            .agent
+            .context("routing omitted its selected agent")?;
+        let current = self.context(&turn.scope).await?;
+        if !current
+            .agents
+            .iter()
+            .any(|a| a.name == agent.name && a.instance_id == agent.instance_id)
+        {
+            return self
+                .reply(
+                    &turn.scope,
+                    "That agent disconnected while I was routing the request. Please try again.",
+                )
+                .await;
+        }
+        // A blocked question must receive an answer, never another prompt.
+        if matches!(
+            decision.operation,
+            Operation::AnswerQuestion
+                | Operation::SendToAgent
+                | Operation::Approve
+                | Operation::Deny
+        ) {
+            if let Some(question) = self
+                .agents
+                .question(&agent.name)
                 .await
-                .iter()
-                .map(|project| json!({"id": project.id, "name": project.name}))
-                .collect::<Vec<_>>())),
-            "list_agents" => Ok(serde_json::to_value(self.refresh_live_sessions().await?)?),
-            "read_agent" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                let herdr_session = self.selected_herdr_session().await?;
-                let lines = call
-                    .arguments
-                    .get("lines")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(100)
-                    .clamp(10, 300) as usize;
-                let session = self
-                    .db
-                    .session(&herdr_session, project_id)?
-                    .with_context(|| format!("project {project_id} has no agent"))?;
-                self.set_active_project(project_id).await?;
-                Ok(
-                    json!({"project_id":project_id,"status":session.status,"output":self.herdr.read(&herdr_session, &session.agent_name, lines).await?}),
+                .filter(|q| q.question_kind == "question")
+            {
+                let (answer, evidence) = self.router.answer_question(&text, &question).await?;
+                self.trace(
+                    &turn.scope,
+                    Activity::new(
+                        format!("{}/question", turn.token),
+                        "routing",
+                        "classified",
+                        true,
+                        json!({"question_id":question.question_id,"result":evidence}),
+                    )
+                    .linked(Some(turn.token.clone()), Some(agent.name.clone())),
+                )?;
+                if matches!(answer, crate::question::Answer::Clarify) {
+                    return self.reply(&turn.scope,"Please say an option number, its label, or your own answer if offered.").await;
+                }
+                if self
+                    .agents
+                    .question(&agent.name)
+                    .await
+                    .is_none_or(|q| q.question_id != question.question_id)
+                {
+                    return self
+                        .reply(
+                            &turn.scope,
+                            "That question has changed. Please answer the latest question.",
+                        )
+                        .await;
+                }
+                let value = json!({"question_id":question.question_id,"answer":answer});
+                let result = self
+                    .operation(
+                        &turn.scope,
+                        &agent.name,
+                        OperationKind::Answer,
+                        value,
+                        Some(turn.token.clone()),
+                    )
+                    .await?;
+                return self
+                    .reply(
+                        &turn.scope,
+                        &crate::routing::acknowledgement(
+                            Operation::AnswerQuestion,
+                            &agent.display_name,
+                            &result,
+                        ),
+                    )
+                    .await;
+            }
+            if decision.operation == Operation::AnswerQuestion {
+                return self
+                    .reply(&turn.scope, "That agent has no supported pending question.")
+                    .await;
+            }
+        }
+        let (name, arguments) = match decision.operation {
+            Operation::SendToAgent => ("send_to_agent", json!({"agent_id":agent.name})),
+            Operation::ReadAgent => ("read_agent", json!({"agent_id":agent.name})),
+            Operation::Cancel => ("cancel_agent", json!({"agent_id":agent.name})),
+            Operation::Approve | Operation::Deny => {
+                if !current
+                    .agents
+                    .iter()
+                    .any(|a| a.name == agent.name && a.status == "blocked")
+                {
+                    return self
+                        .reply(&turn.scope, "That agent has no pending permission request.")
+                        .await;
+                }
+                (
+                    "respond_to_agent",
+                    json!({"agent_id":agent.name,"approve":decision.operation==Operation::Approve}),
                 )
             }
-            "start_session" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                let session = self.open_session(project_id, false).await?;
-                Ok(json!({"project_id":project_id,"session":session,"resumed":false}))
+            _ => unreachable!(),
+        };
+        let trace_id = format!("{}/tool", turn.token);
+        let call = ToolCall {
+            id: trace_id.clone(),
+            name: name.into(),
+            arguments,
+        };
+        self.trace(
+            &turn.scope,
+            Activity::new(
+                &trace_id,
+                name,
+                "executing",
+                false,
+                json!({"arguments":call.arguments}),
+            )
+            .linked(Some(turn.token.clone()), Some(agent.name.clone())),
+        )?;
+        // Exactly one execution. Neither the router nor the request writer can retry it.
+        let result = self
+            .execute_tool(&turn.scope, &call, &trace_id, &HashSet::new(), &text)
+            .await;
+        self.trace(
+            &turn.scope,
+            Activity::new(
+                &trace_id,
+                name,
+                if result.is_ok() { "returned" } else { "failed" },
+                true,
+                match &result {
+                    Ok(value) => json!({"result":value}),
+                    Err(error) => json!({"error":redact(&error.to_string())}),
+                },
+            ),
+        )?;
+        let result = match result {
+            Ok(value) => value,
+            Err(error) => {
+                return self
+                    .reply(
+                        &turn.scope,
+                        &format!(
+                            "I couldn't complete that request: {}",
+                            redact(&error.to_string())
+                        ),
+                    )
+                    .await
             }
-            "resume_session" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                let session = self.open_session(project_id, true).await?;
-                Ok(json!({"project_id":project_id,"session":session,"resumed":true}))
+        };
+        if decision.operation == Operation::ReadAgent {
+            self.record(
+                &turn.scope,
+                "tool",
+                Some(&agent.name),
+                "tool_result",
+                &result.to_string(),
+            )
+            .await?;
+            let speech = if result["status"] == "pending" {
+                format!(
+                    "{} is still working; a fresh result is not available yet.",
+                    agent.display_name
+                )
+            } else {
+                let output = result["output"].as_str().unwrap_or_default();
+                if output.trim().is_empty() {
+                    format!(
+                        "{} is {}. No response is available yet.",
+                        agent.display_name,
+                        result["status"].as_str().unwrap_or("connected")
+                    )
+                } else {
+                    self.intent.summarize(&agent.display_name, output).await?
+                }
+            };
+            self.reply(&turn.scope, &speech).await
+        } else {
+            self.reply(
+                &turn.scope,
+                &crate::routing::acknowledgement(decision.operation, &agent.display_name, &result),
+            )
+            .await
+        }
+    }
+    async fn execute_tool(
+        &self,
+        scope: &Scope,
+        call: &ToolCall,
+        trace_id: &str,
+        sent_agents: &HashSet<String>,
+        utterance: &str,
+    ) -> Result<Value> {
+        let context = self.context(scope).await?;
+        if call.name == "list_agents" {
+            return Ok(crate::intent::routing_agents(&context.agents));
+        }
+        let name = string_arg(&call.arguments, "agent_id")?;
+        let agent = context
+            .agents
+            .iter()
+            .find(|a| a.name == name)
+            .with_context(|| format!("Unknown agent_id {name:?}. Use an exact agent_id from the current roster, not a display name: {}", crate::intent::routing_agents(&context.agents)))?;
+        // Assign an agent lane only after validating the actual target. Invalid
+        // arguments remain visible on the Orchrd lane, never as invented agents.
+        self.trace(
+            scope,
+            Activity::new(trace_id, &call.name, "executing", false, json!({}))
+                .linked(None, Some(agent.name.clone())),
+        )?;
+        match call.name.as_str() {
+            "read_agent" | "latest_result" => {
+                let result = if let Some(reason) =
+                    pending_read_reason(agent, sent_agents, call.name == "latest_result")
+                {
+                    json!({"agent_id":name,"status":"pending","reason":reason,
+                        "message":"A fresh response is not available yet. Do not present an earlier result as this request's answer."})
+                } else if call.name == "read_agent" {
+                    let lines = call.arguments["lines"]
+                        .as_u64()
+                        .unwrap_or(100)
+                        .clamp(10, 300) as usize;
+                    let output = self.agents.read(name).await?;
+                    json!({"agent_id":name,"status":agent.status,"output":output.chars().rev().take(lines * 120).collect::<String>().chars().rev().collect::<String>()})
+                } else {
+                    serde_json::to_value(self.db.latest_response(&scope.session, name)?)?
+                };
+                self.ask(|reply| Message::Addressed {
+                    scope: scope.clone(),
+                    agent_name: name.into(),
+                    instance_id: agent.instance_id.clone(),
+                    reply,
+                })
+                .await?;
+                Ok(result)
             }
             "send_to_agent" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                let instruction = string_arg(&call.arguments, "request")?;
-                let fresh = call
-                    .arguments
-                    .get("fresh_session")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false);
-                let run_id = self
-                    .start_task(project_id, instruction, transcript, fresh)
+                if sent_agents.contains(name) {
+                    bail!("a send to this agent was already attempted in this turn; do not resend");
+                }
+                let request = self
+                    .intent
+                    .draft_agent_request(utterance, &agent.display_name)
                     .await?;
-                Ok(json!({
-                    "project_id":project_id,
-                    "outcome":"sent",
-                    "receipt":run_id
-                }))
-            }
-            "latest_result" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                self.set_active_project(project_id).await?;
-                Ok(serde_json::to_value(self.db.latest_run(project_id)?)?)
+                self.operation(
+                    scope,
+                    name,
+                    OperationKind::Send,
+                    json!({"agent_id":name,"request":request}),
+                    Some(trace_id.into()),
+                )
+                .await
             }
             "respond_to_agent" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                let approve = call
-                    .arguments
-                    .get("approve")
-                    .and_then(Value::as_bool)
+                let approve = call.arguments["approve"]
+                    .as_bool()
                     .context("respond_to_agent omitted approve")?;
-                self.resolve_project_decision(project_id, approve).await?;
-                Ok(json!({"project_id":project_id,"approved":approve}))
+                self.operation(
+                    scope,
+                    name,
+                    if approve {
+                        OperationKind::Approve
+                    } else {
+                        OperationKind::Deny
+                    },
+                    call.arguments.clone(),
+                    Some(trace_id.into()),
+                )
+                .await
             }
             "cancel_agent" => {
-                let project_id = string_arg(&call.arguments, "project_id")?;
-                let herdr_session = self.selected_herdr_session().await?;
-                let session = self
-                    .db
-                    .session(&herdr_session, project_id)?
-                    .with_context(|| format!("project {project_id} has no agent"))?;
-                self.herdr
-                    .send_keys(&herdr_session, &session.agent_name, &["esc"])
-                    .await?;
-                self.db
-                    .set_session_status(&herdr_session, project_id, "idle")?;
-                self.update_reconciled(Some(format!("Cancelled {project_id}")))
-                    .await;
-                Ok(json!({"project_id":project_id,"cancelled":true}))
+                self.operation(
+                    scope,
+                    name,
+                    OperationKind::Cancel,
+                    call.arguments.clone(),
+                    Some(trace_id.into()),
+                )
+                .await
             }
             other => bail!("unknown conversation tool {other}"),
         }
     }
-    pub async fn resolve_approval(&self, approval_id: &str, approve: bool) -> Result<()> {
-        let project_id = approval_id
-            .strip_prefix("agent:")
-            .context("approval did not originate from a coding agent")?;
-        self.resolve_agent_decision(project_id, approve).await
-    }
-    async fn resolve_project_decision(&self, project_id: &str, approve: bool) -> Result<()> {
-        self.resolve_agent_decision(project_id, approve).await
-    }
-    async fn resolve_agent_decision(&self, project_id: &str, approve: bool) -> Result<()> {
-        let herdr_session = self.selected_herdr_session().await?;
-        let session = self
-            .db
-            .session(&herdr_session, project_id)?
-            .with_context(|| format!("project {project_id} has no agent"))?;
-        let live_status = self
-            .live_agent_status(&herdr_session, &session.agent_name)
-            .await?;
-        if live_status.as_deref() != Some("blocked") {
-            bail!("{project_id} is not waiting for approval")
-        }
-        // The monitor may not have persisted the latest Herdr transition yet.
-        if session.status != "blocked" {
-            self.db
-                .set_session_status(&herdr_session, project_id, "blocked")?;
-        }
-        let terminal = self
-            .herdr
-            .read(&herdr_session, &session.agent_name, 100)
-            .await?;
-        let keys = if approve {
-            approval_keys(&terminal)
-        } else {
-            vec!["esc"]
-        };
-        self.herdr
-            .send_keys(&herdr_session, &session.agent_name, &keys)
-            .await?;
-
-        let deadline = Instant::now() + APPROVAL_CONFIRM_TIMEOUT;
-        let confirmed_status = loop {
-            let status = self
-                .live_agent_status(&herdr_session, &session.agent_name)
-                .await?;
-            if status.as_deref() != Some("blocked") {
-                break status;
-            }
-            if Instant::now() >= deadline {
-                bail!("Herdr still reports {project_id} as blocked; the response was not accepted")
-            }
-            sleep(APPROVAL_CONFIRM_POLL_INTERVAL).await;
-        };
-        self.db.set_session_status(
-            &herdr_session,
-            project_id,
-            confirmed_status.as_deref().unwrap_or("unknown"),
-        )?;
-        let decision = if approve { "Approved" } else { "Denied" };
-        self.update_reconciled(Some(format!("{decision} request for {project_id}")))
-            .await;
-        Ok(())
-    }
-    async fn live_agent_status(
+    async fn operation(
         &self,
-        herdr_session: &str,
-        agent_name: &str,
-    ) -> Result<Option<String>> {
-        Ok(agent_states(&self.herdr.agent_list(herdr_session).await?)
-            .into_iter()
-            .find_map(|(name, status)| (name == agent_name).then_some(status)))
-    }
-    async fn refresh_live_sessions(&self) -> Result<Vec<AgentSession>> {
-        let herdr_session = self.selected_herdr_session().await?;
-        let value = self.herdr.agent_list(&herdr_session).await?;
-        let states: HashMap<_, _> = agent_states(&value).into_iter().collect();
-        self.drop_stale_bindings(&herdr_session, &states)?;
-        self.adopt_agents(&herdr_session, &value).await?;
-        let mut sessions = self.db.sessions(&herdr_session)?;
-        for session in &mut sessions {
-            if let Some(status) = states.get(&session.agent_name) {
-                if session.status != *status {
-                    self.db
-                        .set_session_status(&herdr_session, &session.project_id, status)?;
-                    session.status.clone_from(status);
+        scope: &Scope,
+        name: &str,
+        kind: OperationKind,
+        request: Value,
+        parent: Option<String>,
+    ) -> Result<Value> {
+        let (completed, rx) = oneshot::channel();
+        let (id, _agent) = self
+            .ask(|registered| Message::Begin {
+                scope: scope.clone(),
+                agent_name: name.into(),
+                kind,
+                request: request.clone(),
+                parent,
+                registered,
+                completed,
+            })
+            .await?;
+        let delivery = timeout(Duration::from_secs(20), async {
+            self.context(scope).await?;
+            match kind {
+                OperationKind::Send => {
+                    self.agents
+                        .command(
+                            name,
+                            "prompt",
+                            json!({"text":string_arg(&request,"request")?}),
+                        )
+                        .await
                 }
+                OperationKind::Answer => {
+                    self.agents
+                        .command(name, "answer_question", request.clone())
+                        .await
+                }
+                OperationKind::Approve | OperationKind::Deny => {
+                    self.agents
+                        .command(
+                            name,
+                            "permission",
+                            json!({"approve":matches!(kind,OperationKind::Approve)}),
+                        )
+                        .await
+                }
+                OperationKind::Cancel => self.agents.command(name, "cancel", json!({})).await,
             }
-        }
-        Ok(sessions)
+        })
+        .await
+        .unwrap_or_else(|_| {
+            Err(anyhow::anyhow!(
+                "delivery deadline elapsed; outcome is unconfirmed"
+            ))
+        });
+        self.send(Message::Delivered {
+            id,
+            result: delivery,
+        })?;
+        rx.await.context("operation confirmation was interrupted")
     }
-    fn drop_stale_bindings(
-        &self,
-        herdr_session: &str,
-        states: &HashMap<String, String>,
-    ) -> Result<bool> {
-        let mut removed = false;
-        for binding in self.db.sessions(herdr_session)? {
-            if !states.contains_key(&binding.agent_name) {
-                self.db.delete_session(herdr_session, &binding.project_id)?;
-                removed = true;
+    async fn speech_worker(
+        tts: TtsClient,
+        mut policy: watch::Receiver<Snapshot>,
+        messages: mpsc::UnboundedSender<Message>,
+        mut queue: mpsc::UnboundedReceiver<Speech>,
+    ) -> Result<()> {
+        while let Some(speech) = queue.recv().await {
+            while speech.current(&policy.borrow()) && policy.borrow().voice_state != "idle" {
+                policy.changed().await.context("speech policy closed")?;
             }
-        }
-        Ok(removed)
-    }
-    async fn adopt_agents(&self, herdr_session: &str, value: &Value) -> Result<bool> {
-        let projects = self.projects.read().await;
-        let mut adopted = false;
-        for project in projects.iter() {
-            if self.db.session(herdr_session, &project.id)?.is_some() {
+            if !speech.current(&policy.borrow()) {
+                messages
+                    .send(Message::Activity {
+                        scope: speech.scope.clone(),
+                        activity: Activity::new(
+                            format!("{}/speech", speech.id),
+                            "speech",
+                            "skipped",
+                            true,
+                            json!({"reason":"speech policy changed"}),
+                        ),
+                    })
+                    .context("coordinator stopped")?;
                 continue;
             }
-            let mut matches = agent_infos(value)
-                .into_iter()
-                .filter(|agent| agent.kind.as_deref() == Some("codex"))
-                .filter(|agent| {
-                    agent.cwd.as_deref().is_some_and(|cwd| {
-                        cwd.starts_with(&project.path)
-                            && !projects.iter().any(|other| {
-                                other.path != project.path
-                                    && other.path.starts_with(&project.path)
-                                    && cwd.starts_with(&other.path)
-                            })
-                    })
+            messages
+                .send(Message::Activity {
+                    scope: speech.scope.clone(),
+                    activity: Activity::new(
+                        format!("{}/speech", speech.id),
+                        "speech",
+                        "speaking",
+                        false,
+                        json!({}),
+                    ),
                 })
-                .collect::<Vec<_>>();
-            matches.sort_by_key(|agent| !agent.focused);
-            if let Some(agent) = matches.first() {
-                self.db.upsert_session(&AgentSession {
-                    herdr_session: herdr_session.to_owned(),
-                    project_id: project.id.clone(),
-                    workspace_id: agent.workspace_id.clone(),
-                    pane_id: agent.pane_id.clone(),
-                    agent_name: agent.name.clone(),
-                    status: agent.status.clone(),
-                })?;
-                adopted = true;
-            }
-        }
-        Ok(adopted)
-    }
-    async fn start_task(
-        &self,
-        project_id: &str,
-        instruction: &str,
-        transcript: &str,
-        fresh: bool,
-    ) -> Result<String> {
-        let project = self.project(project_id).await?;
-        let herdr_session = self.selected_herdr_session().await?;
-        let session = if !fresh {
-            self.db.session(&herdr_session, project_id)?
-        } else {
-            None
-        };
-        let mut session = match session {
-            Some(s) => s,
-            None => {
-                let mut launch_project = project.clone();
-                if fresh {
-                    launch_project.id =
-                        format!("{}-{}", project.id, &Uuid::new_v4().to_string()[..8]);
-                }
-                let mut s = self
-                    .herdr
-                    .create_session(&herdr_session, &launch_project)
-                    .await?;
-                s.project_id = project.id.clone();
-                self.db.upsert_session(&s)?;
-                s
-            }
-        };
-        let terminal_baseline = self
-            .herdr
-            .read(
-                &herdr_session,
-                &session.agent_name,
-                self.config.summary.max_terminal_lines,
-            )
-            .await
-            .unwrap_or_default();
-        self.herdr
-            .prompt(&herdr_session, &session.agent_name, instruction)
-            .await?;
-        session.status = "working".into();
-        self.db.upsert_session(&session)?;
-        let run = Uuid::new_v4().to_string();
-        self.db.create_run(
-            &run,
-            project_id,
-            transcript,
-            instruction,
-            &terminal_baseline,
-            &herdr_session,
-        )?;
-        self.set_active_project(project_id).await?;
-        self.update_reconciled(Some(format!("Sent to {}", project.name)))
-            .await;
-        Ok(run)
-    }
-    async fn open_session(&self, project_id: &str, resume: bool) -> Result<AgentSession> {
-        let project = self.project(project_id).await?;
-        let herdr_session = self.selected_herdr_session().await?;
-        let mut launch_project = project.clone();
-        launch_project.id = format!("{}-{}", project.id, &Uuid::new_v4().to_string()[..8]);
-        let mut session = if resume {
-            self.herdr
-                .resume_session(&herdr_session, &launch_project)
-                .await?
-        } else {
-            self.herdr
-                .create_session(&herdr_session, &launch_project)
-                .await?
-        };
-        session.project_id = project.id.clone();
-        self.db.upsert_session(&session)?;
-        self.set_active_project(project_id).await?;
-        let message = if resume {
-            format!("Resumed the latest {} session", project.name)
-        } else {
-            format!("Started a new {} session", project.name)
-        };
-        self.update_reconciled(Some(message)).await;
-        Ok(session)
-    }
-    async fn project(&self, id: &str) -> Result<Project> {
-        self.projects
-            .read()
-            .await
-            .iter()
-            .find(|p| p.id == id)
-            .cloned()
-            .with_context(|| format!("unknown project {id}"))
-    }
-    async fn set_active_project(&self, project_id: &str) -> Result<()> {
-        self.project(project_id).await?;
-        self.db.set_setting("active_project", project_id)?;
-        self.state.write().await.active_project = Some(project_id.into());
-        Ok(())
-    }
-    pub async fn set_announcement_mode(&self, mode: AnnouncementMode) -> Result<()> {
-        self.db.set_setting(
-            "announcement_mode",
-            if mode == AnnouncementMode::Auto {
-                "auto"
-            } else {
-                "muted"
-            },
-        )?;
-        self.state.write().await.announcement_mode = mode;
-        self.update_reconciled(None).await;
-        Ok(())
-    }
-    pub async fn repeat_last(&self) -> Result<()> {
-        let speech = self
-            .db
-            .setting("last_spoken")?
-            .context("Orchrd has not spoken yet")?;
-        self.speak_now(&format!("repeat-{}", Uuid::new_v4()), &speech)
-            .await
-    }
-    async fn announce_completion(
-        &self,
-        run_id: &str,
-        project_id: &str,
-        speech: &str,
-    ) -> Result<()> {
-        if self.state.read().await.announcement_mode == AnnouncementMode::Auto {
-            match self.speak_now(run_id, speech).await {
-                Ok(()) => {}
-                Err(error) => {
-                    tracing::warn!(%error, "could not auto-speak completion");
-                }
-            }
-        }
-        let _ = self.events.send(Event::Completion {
-            project: project_id.into(),
-            speech: speech.into(),
-        });
-        Ok(())
-    }
-    async fn speak_now(&self, id: &str, speech: &str) -> Result<()> {
-        self.tts.speak(id, speech).await?;
-        if let Err(error) = self.db.set_setting("last_spoken", speech) {
-            tracing::warn!(%error, "could not remember the last spoken response");
-        }
-        Ok(())
-    }
-    async fn reply(&self, speech: &str, kind: &str) -> Result<()> {
-        let speech = concise_speech(speech);
-        let active = self.state.read().await.active_project.clone();
-        self.db
-            .add_conversation_message("assistant", &speech, active.as_deref(), kind)?;
-        self.update_reconciled(Some(speech.clone())).await;
-        self.speak_now(&format!("reply-{}", Uuid::new_v4()), &speech)
-            .await?;
-        Ok(())
-    }
-    async fn update_reconciled(&self, message: Option<String>) {
-        let snapshot = self.state.read().await;
-        let selected = snapshot.selected_herdr_session.clone();
-        let selected_running = selected.as_deref().is_some_and(|name| {
-            snapshot
-                .herdr_sessions
-                .iter()
-                .any(|session| session.name == name && session.running)
-        });
-        drop(snapshot);
-        let agents = selected
-            .as_deref()
-            .and_then(|session| self.db.sessions(session).ok())
-            .unwrap_or_default();
-        let state = reconciled_state(&agents, selected.is_some(), selected_running);
-        self.update(state, message).await;
-    }
-    async fn report_error(&self, e: anyhow::Error) {
-        let msg = format!("{e:#}");
-        tracing::error!("{msg}");
-        let _ = self.events.send(Event::Error(msg.clone()));
-        self.update("error", Some(msg)).await;
-    }
-    pub async fn monitor(self: Arc<Self>) {
-        loop {
-            let directory = self.herdr.list_sessions().await;
-            let selected = self.state.read().await.selected_herdr_session.clone();
-            match directory {
-                Ok(sessions) => {
-                    let directory_changed = self.state.read().await.herdr_sessions != sessions;
-                    if directory_changed {
-                        let snapshot = {
-                            let mut state = self.state.write().await;
-                            state.herdr_sessions = sessions.clone();
-                            state.clone()
-                        };
-                        let _ = self.events.send(Event::Snapshot(snapshot));
-                    }
-                    let Some(herdr_session) = selected else {
-                        if self.state.read().await.state != "no_session" {
-                            self.update("no_session", Some("Choose a Herdr session".into()))
-                                .await;
-                        }
-                        sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
-                        continue;
-                    };
-                    let running = sessions
-                        .iter()
-                        .any(|session| session.name == herdr_session && session.running);
-                    if !running {
-                        if self.state.read().await.state != "session_unavailable" {
-                            self.update(
-                                "session_unavailable",
-                                Some(format!("Herdr session {herdr_session} is not running")),
-                            )
-                            .await;
-                        }
-                        sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
-                        continue;
-                    }
-                    if matches!(
-                        self.state.read().await.state.as_str(),
-                        "no_session" | "session_unavailable"
-                    ) {
-                        self.update_reconciled(None).await;
-                    }
-                    let value = match self.herdr.agent_list(&herdr_session).await {
-                        Ok(value) => value,
-                        Err(error) => {
-                            tracing::debug!(%error, %herdr_session, "selected Herdr session unavailable");
-                            sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
-                            continue;
-                        }
-                    };
-                    let states: HashMap<_, _> = agent_states(&value).into_iter().collect();
-                    let removed = self
-                        .drop_stale_bindings(&herdr_session, &states)
-                        .unwrap_or(false);
-                    let adopted = match self.adopt_agents(&herdr_session, &value).await {
-                        Ok(adopted) => adopted,
-                        Err(error) => {
-                            tracing::warn!(%error, %herdr_session, "could not adopt Herdr agents");
-                            false
-                        }
-                    };
-                    for (name, status) in agent_states(&value) {
-                        if let Some(session) = self
-                            .db
-                            .sessions(&herdr_session)
-                            .unwrap_or_default()
-                            .into_iter()
-                            .find(|s| s.agent_name == name)
-                        {
-                            let old = session.status.clone();
-                            if old != status {
-                                let _ = self.db.set_session_status(
-                                    &herdr_session,
-                                    &session.project_id,
-                                    &status,
-                                );
-                                if status == "done" && old != "done" {
-                                    let has_working_run = self
-                                        .db
-                                        .latest_working_run(&session.project_id, &herdr_session)
-                                        .ok()
-                                        .flatten()
-                                        .is_some();
-                                    if has_working_run {
-                                        if let Err(error) = self
-                                            .finish_project(
-                                                &herdr_session,
-                                                &session.project_id,
-                                                &session.agent_name,
-                                            )
-                                            .await
-                                        {
-                                            self.report_error(error).await;
-                                        }
-                                    } else {
-                                        self.update_reconciled(Some(format!(
-                                            "{} session is ready",
-                                            session.project_id
-                                        )))
-                                        .await;
-                                    }
-                                } else if status == "blocked" {
-                                    let project = self.project(&session.project_id).await;
-                                    let terminal = self
-                                        .herdr
-                                        .read(&herdr_session, &session.agent_name, 100)
-                                        .await
-                                        .unwrap_or_default();
-                                    let message = match project {
-                                        Ok(project) => self
-                                            .intent
-                                            .describe_blocker(&project, &terminal)
-                                            .await
-                                            .unwrap_or_else(|_| format!("{} needs your input. Say approve or deny, or open Herdr for details.", session.project_id)),
-                                        Err(_) => format!("{} needs your input. Say approve or deny, or open Herdr for details.", session.project_id),
-                                    };
-                                    let message = concise_speech(&message);
-                                    let _ = self.db.add_conversation_message(
-                                        "assistant",
-                                        &message,
-                                        Some(&session.project_id),
-                                        "agent_question",
-                                    );
-                                    let _ = self.events.send(Event::Approval {
-                                        id: format!("agent:{}", session.project_id),
-                                        message: message.clone(),
-                                    });
-                                    if self.state.read().await.announcement_mode
-                                        == AnnouncementMode::Auto
-                                    {
-                                        if let Err(error) = self
-                                            .speak_now(
-                                                &format!("blocked-{}", session.project_id),
-                                                &message,
-                                            )
-                                            .await
-                                        {
-                                            tracing::warn!(%error, "could not speak agent question");
-                                        }
-                                    }
-                                    self.update_reconciled(Some(message)).await;
-                                } else {
-                                    self.update_reconciled(Some(format!(
-                                        "{} is {}",
-                                        session.project_id, status
-                                    )))
-                                    .await;
-                                }
+                .context("coordinator stopped")?;
+            let result = {
+                let playback = tts.speak(&speech.id, &speech.text);
+                tokio::pin!(playback);
+                loop {
+                    tokio::select! {
+                        result=&mut playback=>break result,
+                        changed=policy.changed()=>{
+                            changed.context("speech policy closed")?;
+                            if !speech.current(&policy.borrow()) || policy.borrow().voice_state=="listening" {
+                                break Err(anyhow::anyhow!("speech interrupted"));
                             }
                         }
                     }
-                    if adopted || removed {
-                        self.update_reconciled(None).await;
-                    }
                 }
-                Err(error) => tracing::debug!("Herdr session discovery unavailable: {error:#}"),
+            };
+            if result.is_err() {
+                let _ = tts.cancel().await;
             }
-            sleep(Duration::from_millis(self.config.herdr.poll_interval_ms)).await;
+            messages
+                .send(Message::Spoken { speech, result })
+                .context("coordinator stopped")?;
         }
-    }
-    async fn finish_project(
-        &self,
-        herdr_session: &str,
-        project_id: &str,
-        agent: &str,
-    ) -> Result<()> {
-        let project = self.project(project_id).await?;
-        let run = self
-            .db
-            .latest_working_run(project_id, herdr_session)?
-            .context("completed agent has no run")?;
-        let baseline = self.db.run_terminal_baseline(&run.id)?;
-        let terminal = match self
-            .herdr
-            .read(herdr_session, agent, self.config.summary.max_terminal_lines)
-            .await
-        {
-            Ok(terminal) => terminal_since_baseline(&baseline, &terminal),
-            Err(error) => {
-                tracing::warn!(%error, %project_id, "could not read completed agent output");
-                String::new()
-            }
-        };
-        let speech = if terminal.trim().is_empty() {
-            reliable_summary_fallback()
-        } else {
-            match self
-                .intent
-                .summarize(&project, &run.prompt, &terminal)
-                .await
-            {
-                Ok(speech) if !looks_like_terminal_chrome(&speech) => speech,
-                Ok(speech) => {
-                    tracing::warn!(%project_id, %speech, "discarded unreliable completion summary");
-                    reliable_summary_fallback()
-                }
-                Err(error) => {
-                    tracing::warn!(%error, %project_id, "could not summarize completed agent output");
-                    reliable_summary_fallback()
-                }
-            }
-        };
-        let speech = concise_speech(&speech);
-        let id = self
-            .db
-            .finish_latest_run(project_id, herdr_session, "done", &speech)?
-            .context("no working run")?;
-        self.db.add_conversation_message(
-            "assistant",
-            &speech,
-            Some(project_id),
-            "agent_completion",
-        )?;
-        self.update_reconciled(Some(speech.clone())).await;
-        self.announce_completion(&id, project_id, &speech).await
-    }
-}
-fn terminal_since_baseline(baseline: &str, current: &str) -> String {
-    let baseline = substantive_terminal_lines(baseline);
-    let current = substantive_terminal_lines(current);
-    let max_overlap = baseline.len().min(current.len());
-    let overlap = (1..=max_overlap)
-        .rev()
-        .find(|&count| baseline[baseline.len() - count..] == current[..count])
-        .unwrap_or(0);
-    current[overlap..].join("\n")
-}
-
-fn substantive_terminal_lines(terminal: &str) -> Vec<String> {
-    terminal
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !looks_like_terminal_chrome(line))
-        .map(str::to_owned)
-        .collect()
-}
-
-fn looks_like_terminal_chrome(text: &str) -> bool {
-    let line = text.trim();
-    line == "›"
-        || line.starts_with('›')
-        || line.starts_with("✔ You approved")
-        || line.starts_with("gpt-") && line.contains(" · ~/")
-        || line.contains("ctrl +") && line.contains("transcript")
-        || line.starts_with("─ Worked for")
-        || (!line.is_empty()
-            && line
-                .chars()
-                .all(|character| matches!(character, '─' | '━' | '═' | ' ')))
-}
-
-fn reliable_summary_fallback() -> String {
-    "The agent finished, but Orchrd could not produce a reliable summary.".into()
-}
-
-fn string_arg<'a>(arguments: &'a Value, name: &str) -> Result<&'a str> {
-    arguments
-        .get(name)
-        .and_then(Value::as_str)
-        .with_context(|| format!("tool call omitted {name}"))
-}
-
-fn successful_action_speech(tool: &str, result: &Value) -> Option<String> {
-    let project = result
-        .get("project_id")
-        .and_then(Value::as_str)
-        .unwrap_or("the project");
-    match tool {
-        "send_to_agent" => match result.get("outcome").and_then(Value::as_str) {
-            Some("sent")
-                if result
-                    .get("receipt")
-                    .and_then(Value::as_str)
-                    .is_some_and(|receipt| !receipt.is_empty()) =>
-            {
-                Some(format!("Sent to {project}."))
-            }
-            _ => None,
-        },
-        "start_session" => Some(format!("Started a new session for {project}.")),
-        "resume_session" => Some(format!("Resumed the latest session for {project}.")),
-        "respond_to_agent" => {
-            if result.get("approved").and_then(Value::as_bool) == Some(true) {
-                Some("Approved.".into())
-            } else {
-                Some("Denied.".into())
-            }
-        }
-        "cancel_agent" => Some(format!("Cancelled the current operation for {project}.")),
-        _ => None,
+        bail!("speech queue closed")
     }
 }
 
-fn failed_action_speech(tool: &str) -> Option<&'static str> {
-    match tool {
-        "send_to_agent" => Some("I couldn't send that request. Check the Orchrd log for details."),
-        "start_session" => Some("I couldn't start that session. Check the Orchrd log for details."),
-        "resume_session" => {
-            Some("I couldn't resume that session. Check the Orchrd log for details.")
-        }
-        "respond_to_agent" => {
-            Some("I couldn't apply that response. Check the Orchrd log for details.")
-        }
-        "cancel_agent" => {
-            Some("I couldn't cancel that operation. Check the Orchrd log for details.")
-        }
-        _ => None,
-    }
-}
-
-fn approval_keys(terminal: &str) -> Vec<&'static str> {
-    let lower = terminal.to_ascii_lowercase();
-    let numbered_approval = lower.lines().any(|line| {
-        let line = line.trim_start();
-        (line.starts_with("1.") || line.starts_with("1)"))
-            && ["yes", "approve", "allow", "proceed", "run"]
-                .iter()
-                .any(|word| line.contains(word))
-    }) || [
-        "press 1 to approve",
-        "reply with 1 to approve",
-        "enter 1 to approve",
-    ]
-    .iter()
-    .any(|phrase| lower.contains(phrase));
-
-    if numbered_approval {
-        vec!["1", "enter"]
-    } else if lower.contains("y/n") || lower.contains("y / n") {
-        vec!["y", "enter"]
+fn pending_read_reason(
+    agent: &crate::agent::AgentInfo,
+    sent_agents: &HashSet<String>,
+    latest_result: bool,
+) -> Option<&'static str> {
+    if sent_agents.contains(&agent.name) {
+        Some("sent_in_current_turn")
+    } else if latest_result && agent.status == "working" {
+        Some("agent_working")
+    } else if latest_result && agent.status == "blocked" {
+        Some("agent_blocked")
     } else {
-        // Codex approval menus select the highlighted default with Enter.
-        vec!["enter"]
+        None
     }
 }
 
-fn reconciled_state(
-    agents: &[AgentSession],
-    has_selected_session: bool,
-    selected_session_running: bool,
-) -> &'static str {
-    if !has_selected_session {
-        "no_session"
-    } else if !selected_session_running {
-        "session_unavailable"
-    } else if agents.iter().any(|agent| agent.status == "blocked") {
-        "blocked"
-    } else if agents.iter().any(|agent| agent.status == "working") {
-        "working"
-    } else if agents.iter().any(|agent| agent.status == "unknown") {
-        "unknown"
-    } else {
-        "idle"
+#[cfg(test)]
+mod readback_tests {
+    use super::*;
+
+    #[test]
+    fn a_new_send_cannot_read_a_previous_result_in_the_same_turn() {
+        let agent = crate::agent::AgentInfo {
+            display_name: "Coder".into(),
+            name: "coder".into(),
+            kind: None,
+            instance_id: "instance".into(),
+            cwd: None,
+            status: "done".into(),
+            state_change_seq: Some(2),
+        };
+        let mut sent = HashSet::new();
+        sent.insert("coder".into());
+        assert_eq!(
+            pending_read_reason(&agent, &sent, true),
+            Some("sent_in_current_turn")
+        );
+        assert_eq!(
+            pending_read_reason(&agent, &sent, false),
+            Some("sent_in_current_turn")
+        );
+        sent.clear();
+        assert_eq!(pending_read_reason(&agent, &sent, true), None);
+        let working = crate::agent::AgentInfo {
+            status: "working".into(),
+            ..agent
+        };
+        assert_eq!(
+            pending_read_reason(&working, &sent, true),
+            Some("agent_working")
+        );
+        assert_eq!(pending_read_reason(&working, &sent, false), None);
+        let blocked = crate::agent::AgentInfo {
+            status: "blocked".into(),
+            ..working
+        };
+        assert_eq!(
+            pending_read_reason(&blocked, &sent, true),
+            Some("agent_blocked")
+        );
     }
+}
+fn string_arg<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .with_context(|| format!("tool call omitted {key}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::UnixListener,
+    };
 
-    fn session(status: &str) -> AgentSession {
-        AgentSession {
-            herdr_session: "work".into(),
-            project_id: status.into(),
-            workspace_id: "w1".into(),
-            pane_id: "w1:p1".into(),
-            agent_name: format!("agent_{status}"),
-            status: status.into(),
+    #[tokio::test]
+    async fn speech_waits_for_each_playback_receipt_and_skips_stale_lifetime() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("tts.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        let snapshot = Snapshot::initial(AnnouncementMode::Auto);
+        let (_policy, rx) = watch::channel(snapshot.clone());
+        let (messages, mut results) = mpsc::unbounded_channel();
+        let (speech, queue) = mpsc::unbounded_channel();
+        let worker = tokio::spawn(Controller::speech_worker(
+            TtsClient::new(socket),
+            rx,
+            messages,
+            queue,
+        ));
+        let make = |id: &str| Speech {
+            id: id.into(),
+            text: format!("Result {id}."),
+            scope: snapshot.scope.clone(),
+            epoch: snapshot.speech_epoch,
+            automatic: true,
+        };
+        let mut stale = make("stale");
+        stale.scope.epoch = "old lifetime".into();
+        speech.send(stale).unwrap();
+        speech.send(make("first")).unwrap();
+        speech.send(make("second")).unwrap();
+        for id in ["first", "second"] {
+            let (stream, _) = timeout(Duration::from_secs(2), listener.accept())
+                .await
+                .unwrap()
+                .unwrap();
+            let mut stream = BufReader::new(stream);
+            let mut line = String::new();
+            stream.read_line(&mut line).await.unwrap();
+            assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["id"], id);
+            // The next speech must not reach TTS until this playback completes.
+            assert!(timeout(Duration::from_millis(30), listener.accept())
+                .await
+                .is_err());
+            stream
+                .get_mut()
+                .write_all(b"{\"ok\":true}\n")
+                .await
+                .unwrap();
+            loop {
+                match timeout(Duration::from_secs(2), results.recv())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                {
+                    Message::Spoken { speech, result } => {
+                        assert_eq!(speech.id, id);
+                        result.unwrap();
+                        break;
+                    }
+                    Message::Activity { activity, .. } => {
+                        assert!(matches!(activity.state.as_str(), "speaking" | "skipped"))
+                    }
+                    _ => panic!("unexpected worker message"),
+                }
+            }
         }
-    }
-
-    #[test]
-    fn reconciles_agent_states() {
-        assert_eq!(
-            reconciled_state(&[session("working")], true, true),
-            "working"
-        );
-        assert_eq!(
-            reconciled_state(&[session("working"), session("blocked")], true, true),
-            "blocked"
-        );
-        assert_eq!(reconciled_state(&[session("done")], true, true), "idle");
-        assert_eq!(reconciled_state(&[], false, false), "no_session");
-        assert_eq!(reconciled_state(&[], true, false), "session_unavailable");
-    }
-
-    #[test]
-    fn chooses_keys_from_the_agent_prompt() {
-        assert_eq!(
-            approval_keys("1. Yes, proceed\n2. No, and tell Codex what to do"),
-            vec!["1", "enter"]
-        );
-        assert_eq!(approval_keys("Continue? [y/N]"), vec!["y", "enter"]);
-        assert_eq!(
-            approval_keys("Press Enter to approve or Esc to cancel"),
-            vec!["enter"]
-        );
-    }
-
-    #[test]
-    fn completion_output_starts_after_the_saved_terminal_baseline() {
-        let baseline = "old result\ngpt-5.6-sol medium · ~/project\n›";
-        let current = "old result\ngpt-5.6-sol medium · ~/project\n› new request\nnew result\ngpt-5.6-sol medium · ~/project";
-        assert_eq!(terminal_since_baseline(baseline, current), "new result");
-    }
-
-    #[test]
-    fn completion_output_handles_scrollback_that_dropped_old_lines() {
-        let baseline = "old one\nold two\nold three";
-        let current = "old two\nold three\ncurrent task result";
-        assert_eq!(
-            terminal_since_baseline(baseline, current),
-            "current task result"
-        );
-    }
-
-    #[test]
-    fn terminal_footer_is_not_a_valid_summary() {
-        assert!(looks_like_terminal_chrome(
-            "gpt-5.6-sol medium · ~/Documents/Projects/orchrd"
-        ));
-        assert!(!looks_like_terminal_chrome(
-            "The requested layout change is complete."
-        ));
-    }
-
-    #[test]
-    fn controller_acknowledges_only_successful_action_results() {
-        assert_eq!(
-            successful_action_speech(
-                "send_to_agent",
-                &json!({
-                    "project_id":"orchrd",
-                    "outcome":"sent",
-                    "receipt":"run-123"
-                })
-            )
-            .as_deref(),
-            Some("Sent to orchrd.")
-        );
-        assert_eq!(
-            successful_action_speech(
-                "send_to_agent",
-                &json!({"project_id":"orchrd","outcome":"unknown"})
-            ),
-            None
-        );
-        assert_eq!(
-            successful_action_speech(
-                "send_to_agent",
-                &json!({"project_id":"orchrd","outcome":"sent"})
-            ),
-            None
-        );
-    }
-
-    #[test]
-    fn controller_owns_side_effect_failure_speech() {
-        assert!(failed_action_speech("send_to_agent").is_some());
-        assert!(failed_action_speech("respond_to_agent").is_some());
-        assert_eq!(failed_action_speech("read_agent"), None);
+        worker.abort();
     }
 }

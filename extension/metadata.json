@@ -1,9 +1,8 @@
 {
   "uuid": "orchrd@kacper.local",
   "name": "Orchrd",
-  "description": "Voice control for Herdr coding agents",
-  "shell-version": ["50"],
+  "description": "Voice control for Toad coding agents",
+  "shell-version": ["50", "51"],
   "settings-schema": "org.gnome.shell.extensions.orchrd",
   "version": 1
 }
-

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+trace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+trace_dir="$(mktemp -d /tmp/toad-mouse.XXXXXX)"
+trace_file="$trace_dir/events.log"
+
+printf 'Mouse trace: %s\n' "$trace_file"
+printf 'Run Toad normally; when mouse input fails, note the time and try one click and one scroll.\n'
+printf 'This trace records widget names and coordinates, not prompt or agent text.\n'
+
+TOAD_MOUSE_TRACE_FILE="$trace_file" \
+PYTHONPATH="$trace_root/toad_mouse_trace${PYTHONPATH:+:$PYTHONPATH}" \
+toad "$@"

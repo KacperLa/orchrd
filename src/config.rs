@@ -2,7 +2,6 @@ use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashSet,
     env, fs,
     path::{Path, PathBuf},
 };
@@ -11,34 +10,18 @@ use std::{
 #[serde(default)]
 pub struct Config {
     pub commands: Commands,
-    pub herdr: Herdr,
     pub intent: Intent,
+    pub routing: Routing,
     pub conversation: Conversation,
-    pub discovery: Discovery,
     pub voice: Voice,
+    pub stt: Stt,
     pub tts: Tts,
-    pub summary: Summary,
-    pub projects: Vec<Project>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(default)]
-pub struct Discovery {
-    pub roots: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Commands {
     pub voxtype: String,
-    pub herdr: String,
-    pub codex: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct Herdr {
-    pub poll_interval_ms: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -51,19 +34,51 @@ pub struct Intent {
     pub timeout_seconds: u64,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Routing {
+    #[serde(alias = "url")]
+    pub endpoint: String,
+    pub model: String,
+    /// Empty means unauthenticated (for a local server).
+    pub api_key: String,
+    pub timeout_seconds: u64,
+}
+impl std::fmt::Debug for Routing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Routing")
+            .field("endpoint", &self.endpoint)
+            .field("model", &self.model)
+            .field("api_key", &"[redacted]")
+            .field("timeout_seconds", &self.timeout_seconds)
+            .finish()
+    }
+}
+impl Default for Routing {
+    fn default() -> Self {
+        Self {
+            endpoint: "http://192.168.1.104:8009/v1/systemone".into(),
+            model: "kev-latest".into(),
+            api_key: String::new(),
+            timeout_seconds: 30,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Conversation {
+    // Accepted for compatibility with older configs; routing no longer replays history.
     pub max_messages: usize,
     pub max_tool_rounds: usize,
     pub max_tool_output_chars: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Voice {
     pub announcement_mode: AnnouncementMode,
-    pub max_recording_seconds: u64,
+    pub transcription_timeout_seconds: u64,
     pub voxtype_state_file: Option<PathBuf>,
 }
 
@@ -78,6 +93,8 @@ pub enum AnnouncementMode {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Tts {
+    pub provider: TtsProvider,
+    pub api: SpeechApi,
     pub socket: Option<PathBuf>,
     pub language: String,
     pub model_config: PathBuf,
@@ -85,40 +102,92 @@ pub struct Tts {
     pub quantize: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct Summary {
-    pub cloud_context: String,
-    pub max_terminal_lines: usize,
-    pub include_diff: bool,
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TtsProvider {
+    #[default]
+    Pocket,
+    OpenaiCompatible,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SttProvider {
+    #[default]
+    Voxtype,
+    OpenaiCompatible,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Stt {
+    pub provider: SttProvider,
+    pub api: SpeechApi,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Project {
-    pub id: String,
-    pub name: String,
-    pub path: PathBuf,
-    #[serde(default)]
-    pub goal: String,
+#[serde(default, deny_unknown_fields)]
+pub struct SpeechApi {
+    pub base_url: String,
+    pub model: String,
+    pub voice: String,
+    /// Empty means unauthenticated (for a local server).
+    pub api_key_env: String,
+    pub timeout_seconds: u64,
+}
+
+impl Default for SpeechApi {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            model: String::new(),
+            voice: String::new(),
+            api_key_env: String::new(),
+            timeout_seconds: 60,
+        }
+    }
+}
+
+impl SpeechApi {
+    fn validate(&self, name: &str, needs_voice: bool) -> Result<()> {
+        let url = reqwest::Url::parse(&self.base_url)
+            .with_context(|| format!("{name}.api.base_url must be an HTTP(S) URL"))?;
+        if !matches!(url.scheme(), "https" | "http")
+            || url.host_str().is_none()
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            bail!(
+                "{name}.api.base_url must be an HTTP(S) URL without credentials, query or fragment"
+            );
+        }
+        if self.model.trim().is_empty() || (needs_voice && self.voice.trim().is_empty()) {
+            bail!("{name}.api.model (and for TTS, voice) are required");
+        }
+        if self.timeout_seconds == 0 {
+            bail!("{name}.api.timeout_seconds must be greater than zero");
+        }
+        Ok(())
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             commands: Commands::default(),
-            herdr: Herdr::default(),
             intent: Intent {
                 base_url: String::new(),
                 model: String::new(),
                 api_key_env: default_api_key_env(),
                 timeout_seconds: default_intent_timeout_seconds(),
             },
+            routing: Routing::default(),
             conversation: Conversation::default(),
-            discovery: Discovery::default(),
             voice: Voice::default(),
+            stt: Stt::default(),
             tts: Tts::default(),
-            summary: Summary::default(),
-            projects: vec![],
         }
     }
 }
@@ -135,15 +204,6 @@ impl Default for Commands {
     fn default() -> Self {
         Self {
             voxtype: "voxtype".into(),
-            herdr: "herdr".into(),
-            codex: "codex".into(),
-        }
-    }
-}
-impl Default for Herdr {
-    fn default() -> Self {
-        Self {
-            poll_interval_ms: 2_000,
         }
     }
 }
@@ -151,7 +211,7 @@ impl Default for Voice {
     fn default() -> Self {
         Self {
             announcement_mode: AnnouncementMode::Muted,
-            max_recording_seconds: 60,
+            transcription_timeout_seconds: 60,
             voxtype_state_file: None,
         }
     }
@@ -160,19 +220,12 @@ impl Default for Tts {
     fn default() -> Self {
         Self {
             socket: None,
+            provider: TtsProvider::default(),
+            api: SpeechApi::default(),
             language: "english_2026-04".into(),
             model_config: PathBuf::new(),
             voice: PathBuf::new(),
             quantize: true,
-        }
-    }
-}
-impl Default for Summary {
-    fn default() -> Self {
-        Self {
-            cloud_context: "rich".into(),
-            max_terminal_lines: 300,
-            include_diff: true,
         }
     }
 }
@@ -193,105 +246,31 @@ impl Config {
     pub fn load(path: Option<&Path>) -> Result<Self> {
         let path = path.map(PathBuf::from).unwrap_or(Self::default_path()?);
         let raw = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-        let mut cfg: Self =
+        let cfg: Self =
             toml::from_str(&raw).with_context(|| format!("parse {}", path.display()))?;
         cfg.validate()?;
-        for project in &mut cfg.projects {
-            project.path = project.path.canonicalize().with_context(|| {
-                format!(
-                    "canonicalize project {} at {}",
-                    project.id,
-                    project.path.display()
-                )
-            })?;
-        }
-        for root in &mut cfg.discovery.roots {
-            *root = root
-                .canonicalize()
-                .with_context(|| format!("canonicalize discovery root {}", root.display()))?;
-        }
         Ok(cfg)
     }
     pub fn validate(&self) -> Result<()> {
         if self.intent.base_url.is_empty() || self.intent.model.is_empty() {
             bail!("intent.base_url and intent.model are required")
         }
-        if self.conversation.max_messages == 0 || self.conversation.max_tool_rounds == 0 {
-            bail!("conversation.max_messages and max_tool_rounds must be greater than zero")
+        if self.routing.endpoint.is_empty()
+            || self.routing.model.is_empty()
+            || self.routing.timeout_seconds == 0
+        {
+            bail!("routing endpoint, model, and a positive timeout are required")
         }
-        let mut ids = HashSet::new();
-        for project in &self.projects {
-            if project.id.is_empty()
-                || !project
-                    .id
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
-            {
-                bail!(
-                    "invalid project id {:?}; use lowercase letters, digits, '-' or '_'",
-                    project.id
-                );
-            }
-            if !ids.insert(&project.id) {
-                bail!("duplicate project id {:?}", project.id);
-            }
-            if !project.path.is_dir() {
-                bail!(
-                    "project path is not a directory: {}",
-                    project.path.display()
-                );
-            }
+        if self.voice.transcription_timeout_seconds == 0 {
+            bail!("voice.transcription_timeout_seconds must be greater than zero")
         }
-        for root in &self.discovery.roots {
-            if !root.is_dir() {
-                bail!("discovery root is not a directory: {}", root.display());
-            }
+        if self.stt.provider == SttProvider::OpenaiCompatible {
+            self.stt.api.validate("stt", false)?;
+        }
+        if self.tts.provider == TtsProvider::OpenaiCompatible {
+            self.tts.api.validate("tts", true)?;
         }
         Ok(())
-    }
-    pub fn resolved_projects(&self) -> Result<Vec<Project>> {
-        let mut projects = self.projects.clone();
-        let mut ids: HashSet<String> = projects.iter().map(|p| p.id.clone()).collect();
-        let explicit_paths: HashSet<PathBuf> = projects.iter().map(|p| p.path.clone()).collect();
-        let mut discovered = Vec::new();
-
-        for root in &self.discovery.roots {
-            for entry in fs::read_dir(root)
-                .with_context(|| format!("read discovery root {}", root.display()))?
-            {
-                let entry = entry?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.starts_with('.') || !entry.path().is_dir() {
-                    continue;
-                }
-                let path = entry.path().canonicalize()?;
-                if explicit_paths.contains(&path) {
-                    continue;
-                }
-                discovered.push((name, path));
-            }
-        }
-        discovered.sort_by(|a, b| a.1.cmp(&b.1));
-
-        for (name, path) in discovered {
-            let base_id = project_id_from_name(&name);
-            if base_id.is_empty() {
-                continue;
-            }
-            let mut id = base_id.clone();
-            let mut suffix = 2;
-            while !ids.insert(id.clone()) {
-                id = format!("{base_id}-{suffix}");
-                suffix += 1;
-            }
-            projects.push(Project {
-                id,
-                goal: format!("Work on {name}"),
-                name,
-                path,
-            });
-        }
-        Ok(projects)
     }
     pub fn api_key(&self) -> Result<String> {
         env::var(&self.intent.api_key_env).with_context(|| {
@@ -329,21 +308,6 @@ impl Config {
     }
 }
 
-fn project_id_from_name(name: &str) -> String {
-    let mut id = String::new();
-    let mut separator = false;
-    for ch in name.chars().flat_map(char::to_lowercase) {
-        if ch.is_ascii_alphanumeric() {
-            id.push(ch);
-            separator = false;
-        } else if !id.is_empty() && !separator {
-            id.push('-');
-            separator = true;
-        }
-    }
-    id.trim_end_matches('-').to_owned()
-}
-
 // Avoid adding a libc crate only to construct a last-resort temporary path.
 #[cfg(unix)]
 unsafe fn libc_getuid() -> u32 {
@@ -364,43 +328,62 @@ mod tests {
     fn defaults_are_stable() {
         let c = Config::default();
         assert_eq!(c.voice.announcement_mode, AnnouncementMode::Muted);
+        assert_eq!(c.stt.provider, SttProvider::Voxtype);
+        assert_eq!(c.tts.provider, TtsProvider::Pocket);
+    }
+    #[test]
+    fn routing_config_accepts_api_details_and_preserves_old_configs() {
+        let c: Config = toml::from_str(
+            r#"
+            [routing]
+            url = "https://decisions.example/v1/systemone"
+            model = "my-decision-model"
+            api_key = "test-private-key"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(c.routing.endpoint, "https://decisions.example/v1/systemone");
+        assert_eq!(c.routing.model, "my-decision-model");
+        assert_eq!(c.routing.api_key, "test-private-key");
+        assert!(!format!("{c:?}").contains("test-private-key"));
+        let old: Routing =
+            toml::from_str("endpoint = 'http://localhost:8009/v1/systemone'\nmodel = 'kev'")
+                .unwrap();
+        assert!(old.api_key.is_empty());
+        assert!(Routing::default().api_key.is_empty());
+    }
+    #[test]
+    fn speech_provider_config_is_explicit_and_validated() {
+        assert!(toml::from_str::<Stt>("provider = 'mystery'").is_err());
+        let mut c = Config::default();
+        c.intent.base_url = "https://example.com/v1".into();
+        c.intent.model = "router".into();
+        assert!(c.validate().is_ok());
+        c.stt.provider = SttProvider::OpenaiCompatible;
+        assert!(c.validate().is_err());
+        c.stt.api.base_url = "http://localhost:8000/v1".into();
+        c.stt.api.model = "transcriber".into();
+        assert!(c.validate().is_ok());
+        c.tts.provider = TtsProvider::OpenaiCompatible;
+        c.tts.api = c.stt.api.clone();
+        assert!(c.validate().is_err()); // voice required
+        c.tts.api.voice = "test".into();
+        assert!(c.validate().is_ok());
+        c.tts.api.timeout_seconds = 0;
+        assert!(c.validate().is_err());
+        c.tts.api.timeout_seconds = 60;
+        c.tts.api.base_url = "https://user:secret@example.com/v1".into();
+        assert!(c.validate().is_err());
+    }
+    #[test]
+    fn removed_options_are_rejected_and_transcription_timeout_is_explicit() {
+        assert!(toml::from_str::<Voice>("max_recording_seconds = 10").is_err());
+        let voice: Voice = toml::from_str("transcription_timeout_seconds = 10").unwrap();
+        assert_eq!(voice.transcription_timeout_seconds, 10);
     }
     #[test]
     fn queued_mode_is_read_as_muted_for_compatibility() {
         let voice: Voice = toml::from_str("announcement_mode = 'queued'").unwrap();
         assert_eq!(voice.announcement_mode, AnnouncementMode::Muted);
-    }
-    #[test]
-    fn creates_safe_project_ids() {
-        assert_eq!(project_id_from_name("AQEye"), "aqeye");
-        assert_eq!(
-            project_id_from_name("electrical_design"),
-            "electrical-design"
-        );
-    }
-    #[test]
-    fn discovers_children_and_keeps_explicit_override() {
-        let root = std::env::temp_dir().join(format!("orchrd-discovery-{}", uuid::Uuid::new_v4()));
-        let aqeye = root.join("AQEye");
-        let orchrd = root.join("orchrd");
-        fs::create_dir_all(&aqeye).unwrap();
-        fs::create_dir_all(&orchrd).unwrap();
-        let mut config = Config::default();
-        config.discovery.roots.push(root.clone());
-        config.projects.push(Project {
-            id: "orchrd".into(),
-            name: "Custom Orchrd".into(),
-            path: orchrd,
-            goal: "Explicit goal".into(),
-        });
-
-        let projects = config.resolved_projects().unwrap();
-        assert_eq!(projects.len(), 2);
-        assert!(projects.iter().any(|p| p.id == "aqeye"));
-        assert_eq!(
-            projects.iter().find(|p| p.id == "orchrd").unwrap().name,
-            "Custom Orchrd"
-        );
-        fs::remove_dir_all(root).unwrap();
     }
 }

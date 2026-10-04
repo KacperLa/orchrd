@@ -1,10 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use orchrd::{
     config::{AnnouncementMode, Config},
     controller::{Controller, Event},
     DBUS_NAME, DBUS_PATH,
 };
 use std::{path::PathBuf, sync::Arc};
+use tokio::{sync::broadcast, task::JoinSet};
 use zbus::{fdo, Connection, SignalContext};
 
 struct OrchrdApi {
@@ -29,18 +30,6 @@ impl OrchrdApi {
     }
     async fn repeat_last(&self) -> fdo::Result<()> {
         self.controller.repeat_last().await.map_err(fdo_err)
-    }
-    async fn select_herdr_session(&self, name: &str) -> fdo::Result<()> {
-        self.controller
-            .select_herdr_session(name)
-            .await
-            .map_err(fdo_err)
-    }
-    async fn resume_last_herdr_session(&self) -> fdo::Result<String> {
-        self.controller
-            .resume_last_herdr_session()
-            .await
-            .map_err(fdo_err)
     }
     async fn set_announcement_mode(&self, mode: &str) -> fdo::Result<()> {
         let mode = match mode {
@@ -69,7 +58,7 @@ impl OrchrdApi {
     #[zbus(signal)]
     async fn completion_finished(
         ctxt: &SignalContext<'_>,
-        project: &str,
+        agent_name: &str,
         speech: &str,
     ) -> zbus::Result<()>;
     #[zbus(signal)]
@@ -104,42 +93,74 @@ async fn main() -> Result<()> {
         .build()
         .await
         .context("connect to user D-Bus")?;
-    let monitor = Arc::clone(&controller);
-    tokio::spawn(async move { monitor.monitor().await });
     let signals = controller.subscribe();
-    tokio::spawn(signal_loop(connection.clone(), signals));
+    let monitor = Arc::clone(&controller);
+    let mut tasks = JoinSet::new();
+    tasks.spawn(monitor.run());
+    tasks.spawn(signal_loop(connection, signals, controller));
     tracing::info!("Orchrd is ready");
-    std::future::pending::<()>().await;
-    Ok(())
+    supervise(tasks).await
 }
-async fn signal_loop(connection: Connection, mut events: tokio::sync::broadcast::Receiver<Event>) {
-    let ctxt = match SignalContext::new(&connection, DBUS_PATH) {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("create D-Bus signal context: {e}");
-            return;
+async fn supervise(mut tasks: JoinSet<Result<()>>) -> Result<()> {
+    tasks
+        .join_next()
+        .await
+        .context("no controller background tasks")?
+        .context("controller background task panicked or was cancelled")??;
+    bail!("controller background task stopped unexpectedly")
+}
+
+// None requests a fresh snapshot after the receiver falls behind.
+async fn next_signal(events: &mut broadcast::Receiver<Event>) -> Result<Option<Event>> {
+    match events.recv().await {
+        Ok(event) => Ok(Some(event)),
+        Err(broadcast::error::RecvError::Lagged(count)) => {
+            tracing::warn!(count, "D-Bus receiver lagged; refreshing snapshot");
+            Ok(None)
         }
-    };
-    while let Ok(event) = events.recv().await {
+        Err(broadcast::error::RecvError::Closed) => bail!("controller event channel closed"),
+    }
+}
+
+async fn signal_loop(
+    connection: Connection,
+    mut events: broadcast::Receiver<Event>,
+    controller: Arc<Controller>,
+) -> Result<()> {
+    let ctxt = SignalContext::new(&connection, DBUS_PATH).context("create D-Bus signal context")?;
+    let mut resync = false;
+    loop {
+        let event = if resync && events.is_empty() {
+            resync = false;
+            Event::Snapshot(Arc::new(controller.snapshot().await))
+        } else {
+            match next_signal(&mut events).await? {
+                Some(Event::Snapshot(_)) if resync => continue,
+                Some(event) => event,
+                None => {
+                    // Preserve queued notifications, then publish current state.
+                    resync = true;
+                    continue;
+                }
+            }
+        };
         let result = match event {
             Event::Snapshot(s) => {
-                OrchrdApi::state_changed(&ctxt, &serde_json::to_string(&s).unwrap_or_default())
-                    .await
+                OrchrdApi::state_changed(&ctxt, &serde_json::to_string(s.as_ref())?).await
             }
             Event::Transcript(t) => OrchrdApi::transcript_ready(&ctxt, &t).await,
-            Event::Completion { project, speech } => {
-                OrchrdApi::completion_finished(&ctxt, &project, &speech).await
+            Event::Completion { agent_name, speech } => {
+                OrchrdApi::completion_finished(&ctxt, &agent_name, &speech).await
             }
             Event::Approval { id, message } => {
                 OrchrdApi::approval_required(&ctxt, &id, &message).await
             }
             Event::Error(e) => OrchrdApi::error(&ctxt, &e).await,
         };
-        if let Err(e) = result {
-            tracing::warn!("emit D-Bus signal: {e}")
-        }
+        result.context("emit D-Bus signal")?;
     }
 }
+
 fn arg_value(flag: &str) -> Option<String> {
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -148,4 +169,36 @@ fn arg_value(flag: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn lag_requests_resync_and_receiver_remains_usable() {
+        let (sender, mut receiver) = broadcast::channel(1);
+        sender.send(Event::Transcript("old".into())).unwrap();
+        sender.send(Event::Transcript("new".into())).unwrap();
+        assert!(next_signal(&mut receiver).await.unwrap().is_none());
+        assert!(
+            matches!(next_signal(&mut receiver).await.unwrap(), Some(Event::Transcript(text)) if text == "new")
+        );
+        drop(sender);
+        assert!(next_signal(&mut receiver).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn supervisor_fails_on_unexpected_task_exit_or_panic() {
+        let mut tasks = JoinSet::new();
+        tasks.spawn(async { Ok(()) });
+        assert!(supervise(tasks).await.is_err());
+        let mut tasks = JoinSet::new();
+        tasks.spawn(async {
+            panic!("test failure");
+            #[allow(unreachable_code)]
+            Ok(())
+        });
+        assert!(supervise(tasks).await.is_err());
+    }
 }

@@ -1,127 +1,28 @@
-use crate::config::Project;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::{path::Path, sync::Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentSession {
-    pub herdr_session: String,
-    pub project_id: String,
-    pub workspace_id: String,
-    pub pane_id: String,
-    pub agent_name: String,
-    pub status: String,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn conversation_history_is_retained_and_windowed() {
-        let dir = tempfile::tempdir().unwrap();
-        let db = Database::open(&dir.path().join("orchrd.sqlite3")).unwrap();
-        db.add_conversation_message("user", "first", None, "utterance")
-            .unwrap();
-        db.add_conversation_message("assistant", "second", None, "reply")
-            .unwrap();
-        db.add_conversation_message("user", "third", None, "utterance")
-            .unwrap();
-
-        let recent = db.recent_conversation(2).unwrap();
-        assert_eq!(recent.len(), 2);
-        assert_eq!(recent[0].content, "second");
-        assert_eq!(recent[1].content, "third");
-
-        let all = db.recent_conversation(10).unwrap();
-        assert_eq!(all.len(), 3);
-        assert_eq!(all[0].content, "first");
-    }
-
-    #[test]
-    fn old_pending_announcements_are_migrated_to_done() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("orchrd.sqlite3");
-        let db = Database::open(&path).unwrap();
-        db.create_run("run", "project", "request", "prompt", "", "work")
-            .unwrap();
-        db.finish_latest_run("project", "work", "pending_announcement", "finished")
-            .unwrap();
-        drop(db);
-
-        let db = Database::open(&path).unwrap();
-        assert_eq!(db.latest_run("project").unwrap().unwrap().status, "done");
-    }
-
-    #[test]
-    fn agent_bindings_are_isolated_by_herdr_session() {
-        let dir = tempfile::tempdir().unwrap();
-        let db = Database::open(&dir.path().join("orchrd.sqlite3")).unwrap();
-        for herdr_session in ["work", "personal"] {
-            db.upsert_session(&AgentSession {
-                herdr_session: herdr_session.into(),
-                project_id: "orchrd".into(),
-                workspace_id: format!("{herdr_session}-workspace"),
-                pane_id: format!("{herdr_session}-pane"),
-                agent_name: format!("{herdr_session}-agent"),
-                status: "idle".into(),
-            })
-            .unwrap();
-        }
-        assert_eq!(db.sessions("work").unwrap().len(), 1);
-        assert_eq!(
-            db.session("personal", "orchrd")
-                .unwrap()
-                .unwrap()
-                .agent_name,
-            "personal-agent"
-        );
-    }
-
-    #[test]
-    fn old_runs_gain_a_herdr_session_column() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("orchrd.sqlite3");
-        let connection = Connection::open(&path).unwrap();
-        connection
-            .execute_batch(
-                "CREATE TABLE runs(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,transcript TEXT NOT NULL,prompt TEXT NOT NULL,terminal_baseline TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,result TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);",
-            )
-            .unwrap();
-        drop(connection);
-
-        let db = Database::open(&path).unwrap();
-        db.create_run("new", "project", "request", "prompt", "", "work")
-            .unwrap();
-        assert_eq!(
-            db.latest_run("project").unwrap().unwrap().herdr_session,
-            "work"
-        );
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunRecord {
-    pub id: String,
-    pub herdr_session: String,
-    pub project_id: String,
-    pub transcript: String,
-    pub prompt: String,
-    pub status: String,
-    pub result: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationMessage {
-    pub id: i64,
     pub role: String,
     pub content: String,
-    pub project_id: Option<String>,
+    pub agent_name: Option<String>,
     pub kind: String,
-    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseJob {
+    pub id: String,
+    pub session: String,
+    pub epoch: String,
+    pub agent_name: String,
+    pub instance_id: String,
+    pub kind: String,
+    pub output: String,
+    pub speech: Option<String>,
 }
 
 pub struct Database {
@@ -133,153 +34,93 @@ impl Database {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let conn =
-            Connection::open(path).with_context(|| format!("open database {}", path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-          CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,name TEXT NOT NULL,path TEXT NOT NULL,goal TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS agent_sessions(herdr_session TEXT NOT NULL,project_id TEXT NOT NULL,workspace_id TEXT NOT NULL,pane_id TEXT NOT NULL,agent_name TEXT NOT NULL,status TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(herdr_session,project_id));
-          CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,transcript TEXT NOT NULL,prompt TEXT NOT NULL,terminal_baseline TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,result TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,herdr_session TEXT NOT NULL DEFAULT '');
-          CREATE TABLE IF NOT EXISTS conversation_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,role TEXT NOT NULL,content TEXT NOT NULL,project_id TEXT,kind TEXT NOT NULL,created_at TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);")?;
-        let has_terminal_baseline = {
-            let mut statement = conn.prepare("PRAGMA table_info(runs)")?;
-            let columns = statement
-                .query_map([], |row| row.get::<_, String>(1))?
+        let mut conn =
+            Connection::open(path).with_context(|| format!("open {}", path.display()))?;
+        conn.execute_batch("PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS conversation_messages(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,role TEXT NOT NULL,content TEXT NOT NULL,
+                agent_name TEXT,kind TEXT NOT NULL,created_at TEXT NOT NULL,
+                session TEXT NOT NULL DEFAULT '');
+            CREATE TABLE IF NOT EXISTS response_jobs(
+                id TEXT PRIMARY KEY,session TEXT NOT NULL,epoch TEXT NOT NULL,agent_name TEXT NOT NULL,
+                instance_id TEXT NOT NULL,kind TEXT NOT NULL,output TEXT NOT NULL,speech TEXT,
+                created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS deliveries(
+                id TEXT PRIMARY KEY,session TEXT NOT NULL,agent_name TEXT NOT NULL,
+                request TEXT NOT NULL,result TEXT,created_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS response_pending ON response_jobs(created_at) WHERE speech IS NULL;")?;
+        // Preserve history from existing installations. Former run/binding tables
+        // are archival data only; live status is never loaded from SQLite.
+        let columns = {
+            let mut stmt = conn.prepare("PRAGMA table_info(conversation_messages)")?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(1))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            columns.iter().any(|column| column == "terminal_baseline")
+            rows
         };
-        if !has_terminal_baseline {
-            conn.execute(
-                "ALTER TABLE runs ADD COLUMN terminal_baseline TEXT NOT NULL DEFAULT ''",
+        let tx = conn.transaction()?;
+        if columns.iter().any(|c| c == "herdr_session") {
+            tx.execute(
+                "ALTER TABLE conversation_messages RENAME COLUMN herdr_session TO session",
                 [],
             )?;
         }
-        let has_herdr_session = {
-            let mut statement = conn.prepare("PRAGMA table_info(runs)")?;
-            let columns = statement
-                .query_map([], |row| row.get::<_, String>(1))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            columns.iter().any(|column| column == "herdr_session")
-        };
-        if !has_herdr_session {
-            conn.execute(
-                "ALTER TABLE runs ADD COLUMN herdr_session TEXT NOT NULL DEFAULT ''",
+        if columns.iter().any(|c| c == "project_id") {
+            tx.execute(
+                "ALTER TABLE conversation_messages RENAME COLUMN project_id TO agent_name",
                 [],
             )?;
         }
-        conn.execute(
-            "UPDATE runs SET status='done' WHERE status='pending_announcement'",
-            [],
+        let response_columns = {
+            let mut stmt = tx.prepare("PRAGMA table_info(response_jobs)")?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(1))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        if response_columns.iter().any(|c| c == "pane_id") {
+            tx.execute(
+                "ALTER TABLE response_jobs RENAME COLUMN pane_id TO instance_id",
+                [],
+            )?;
+        }
+        tx.execute_batch(
+            "UPDATE conversation_messages SET session='toad' WHERE session LIKE 'toad:%';
+            UPDATE response_jobs SET session='toad' WHERE session LIKE 'toad:%';
+            UPDATE deliveries SET session='toad' WHERE session LIKE 'toad:%';
+            DELETE FROM settings WHERE key IN ('selected_session','selected_herdr_session');",
         )?;
+        tx.execute_batch(
+            "CREATE INDEX IF NOT EXISTS history_by_session ON conversation_messages(session,id);",
+        )?;
+        // An interrupted delivery is uncertain, never automatically resent.
+        let interrupted = {
+            let mut stmt =
+                tx.prepare("SELECT id,session,agent_name FROM deliveries WHERE result IS NULL")?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        for (id, session, agent) in interrupted {
+            let result = json!({"operation_id":id,"agent_name":agent,"delivery":"unconfirmed","outcome":"controller_restarted"}).to_string();
+            tx.execute(
+                "UPDATE deliveries SET result=?2 WHERE id=?1",
+                params![id, result],
+            )?;
+            insert_message(&tx, &session, "tool", Some(&agent), "tool_result", &result)?;
+        }
+        tx.commit()?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
-    }
-    pub fn sync_projects(&self, projects: &[Project]) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
-        for p in projects {
-            tx.execute("INSERT INTO projects(id,name,path,goal) VALUES(?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET name=excluded.name,path=excluded.path,goal=excluded.goal", params![p.id,p.name,p.path.to_string_lossy(),p.goal])?;
-        }
-        tx.commit()?;
-        Ok(())
-    }
-    pub fn session(&self, herdr_session: &str, project_id: &str) -> Result<Option<AgentSession>> {
-        let conn = self.conn.lock().unwrap();
-        conn.query_row("SELECT herdr_session,project_id,workspace_id,pane_id,agent_name,status FROM agent_sessions WHERE herdr_session=?1 AND project_id=?2", params![herdr_session, project_id], |r| Ok(AgentSession { herdr_session:r.get(0)?,project_id:r.get(1)?,workspace_id:r.get(2)?,pane_id:r.get(3)?,agent_name:r.get(4)?,status:r.get(5)? })).optional().map_err(Into::into)
-    }
-    pub fn sessions(&self, herdr_session: &str) -> Result<Vec<AgentSession>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt=conn.prepare("SELECT herdr_session,project_id,workspace_id,pane_id,agent_name,status FROM agent_sessions WHERE herdr_session=?1 ORDER BY project_id")?;
-        let rows = stmt
-            .query_map([herdr_session], |r| {
-                Ok(AgentSession {
-                    herdr_session: r.get(0)?,
-                    project_id: r.get(1)?,
-                    workspace_id: r.get(2)?,
-                    pane_id: r.get(3)?,
-                    agent_name: r.get(4)?,
-                    status: r.get(5)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
-    }
-    pub fn upsert_session(&self, s: &AgentSession) -> Result<()> {
-        self.conn.lock().unwrap().execute("INSERT INTO agent_sessions(herdr_session,project_id,workspace_id,pane_id,agent_name,status,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(herdr_session,project_id) DO UPDATE SET workspace_id=excluded.workspace_id,pane_id=excluded.pane_id,agent_name=excluded.agent_name,status=excluded.status,updated_at=excluded.updated_at",params![s.herdr_session,s.project_id,s.workspace_id,s.pane_id,s.agent_name,s.status,Utc::now().to_rfc3339()])?;
-        Ok(())
-    }
-    pub fn set_session_status(
-        &self,
-        herdr_session: &str,
-        project_id: &str,
-        status: &str,
-    ) -> Result<()> {
-        self.conn.lock().unwrap().execute(
-            "UPDATE agent_sessions SET status=?3,updated_at=?4 WHERE herdr_session=?1 AND project_id=?2",
-            params![herdr_session, project_id, status, Utc::now().to_rfc3339()],
-        )?;
-        Ok(())
-    }
-    pub fn delete_session(&self, herdr_session: &str, project_id: &str) -> Result<()> {
-        self.conn.lock().unwrap().execute(
-            "DELETE FROM agent_sessions WHERE herdr_session=?1 AND project_id=?2",
-            params![herdr_session, project_id],
-        )?;
-        Ok(())
-    }
-    pub fn create_run(
-        &self,
-        id: &str,
-        project: &str,
-        transcript: &str,
-        prompt: &str,
-        terminal_baseline: &str,
-        herdr_session: &str,
-    ) -> Result<()> {
-        let now = Utc::now().to_rfc3339();
-        self.conn.lock().unwrap().execute("INSERT INTO runs(id,project_id,transcript,prompt,terminal_baseline,status,created_at,updated_at,herdr_session) VALUES(?1,?2,?3,?4,?5,'working',?6,?6,?7)",params![id,project,transcript,prompt,terminal_baseline,now,herdr_session])?;
-        Ok(())
-    }
-    pub fn run_terminal_baseline(&self, id: &str) -> Result<String> {
-        self.conn
-            .lock()
-            .unwrap()
-            .query_row(
-                "SELECT terminal_baseline FROM runs WHERE id=?1",
-                [id],
-                |row| row.get(0),
-            )
-            .map_err(Into::into)
-    }
-    pub fn finish_latest_run(
-        &self,
-        project: &str,
-        herdr_session: &str,
-        status: &str,
-        result: &str,
-    ) -> Result<Option<String>> {
-        let conn = self.conn.lock().unwrap();
-        let id:Option<String>=conn.query_row("SELECT id FROM runs WHERE project_id=?1 AND herdr_session=?2 AND status='working' ORDER BY created_at DESC LIMIT 1",params![project,herdr_session],|r|r.get(0)).optional()?;
-        if let Some(id) = &id {
-            conn.execute(
-                "UPDATE runs SET status=?2,result=?3,updated_at=?4 WHERE id=?1",
-                params![id, status, result, Utc::now().to_rfc3339()],
-            )?;
-        }
-        Ok(id)
-    }
-    pub fn latest_run(&self, project: &str) -> Result<Option<RunRecord>> {
-        let conn = self.conn.lock().unwrap();
-        conn.query_row("SELECT id,herdr_session,project_id,transcript,prompt,status,result,created_at FROM runs WHERE project_id=?1 ORDER BY created_at DESC LIMIT 1",[project],|r|Ok(RunRecord{id:r.get(0)?,herdr_session:r.get(1)?,project_id:r.get(2)?,transcript:r.get(3)?,prompt:r.get(4)?,status:r.get(5)?,result:r.get(6)?,created_at:r.get(7)?})).optional().map_err(Into::into)
-    }
-    pub fn latest_working_run(
-        &self,
-        project: &str,
-        herdr_session: &str,
-    ) -> Result<Option<RunRecord>> {
-        let conn = self.conn.lock().unwrap();
-        conn.query_row("SELECT id,herdr_session,project_id,transcript,prompt,status,result,created_at FROM runs WHERE project_id=?1 AND herdr_session=?2 AND status='working' ORDER BY created_at DESC LIMIT 1",params![project,herdr_session],|r|Ok(RunRecord{id:r.get(0)?,herdr_session:r.get(1)?,project_id:r.get(2)?,transcript:r.get(3)?,prompt:r.get(4)?,status:r.get(5)?,result:r.get(6)?,created_at:r.get(7)?})).optional().map_err(Into::into)
     }
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
         Ok(self
@@ -292,42 +133,235 @@ impl Database {
             .optional()?)
     }
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
-        self.conn.lock().unwrap().execute("INSERT INTO settings(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",params![key,value])?;
+        self.conn.lock().unwrap().execute("INSERT INTO settings VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",params![key,value])?;
         Ok(())
     }
-    pub fn add_conversation_message(
+    pub fn append(
         &self,
+        session: &str,
         role: &str,
-        content: &str,
-        project_id: Option<&str>,
+        agent: Option<&str>,
         kind: &str,
+        content: &str,
     ) -> Result<()> {
-        self.conn.lock().unwrap().execute(
-            "INSERT INTO conversation_messages(role,content,project_id,kind,created_at) VALUES(?1,?2,?3,?4,?5)",
-            params![role, content, project_id, kind, Utc::now().to_rfc3339()],
-        )?;
-        Ok(())
+        insert_message(
+            &self.conn.lock().unwrap(),
+            session,
+            role,
+            agent,
+            kind,
+            content,
+        )
     }
-    pub fn recent_conversation(&self, limit: usize) -> Result<Vec<ConversationMessage>> {
+    pub fn history(&self, session: &str, limit: usize) -> Result<Vec<ConversationMessage>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,role,content,project_id,kind,created_at FROM (
-                SELECT id,role,content,project_id,kind,created_at
-                FROM conversation_messages ORDER BY id DESC LIMIT ?1
-             ) ORDER BY id",
+            "SELECT role,content,agent_name,kind FROM (
+            SELECT id,role,content,agent_name,kind FROM conversation_messages
+            WHERE session=?1 ORDER BY id DESC LIMIT ?2) ORDER BY id",
         )?;
         let rows = stmt
-            .query_map([limit as i64], |r| {
+            .query_map(params![session, limit as i64], |r| {
                 Ok(ConversationMessage {
-                    id: r.get(0)?,
-                    role: r.get(1)?,
-                    content: r.get(2)?,
-                    project_id: r.get(3)?,
-                    kind: r.get(4)?,
-                    created_at: r.get(5)?,
+                    role: r.get(0)?,
+                    content: r.get(1)?,
+                    agent_name: r.get(2)?,
+                    kind: r.get(3)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
+    }
+    pub fn capture(&self, job: &ResponseJob) -> Result<()> {
+        self.conn.lock().unwrap().execute("INSERT OR IGNORE INTO response_jobs
+            (id,session,epoch,agent_name,instance_id,kind,output,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![job.id,job.session,job.epoch,job.agent_name,job.instance_id,job.kind,job.output,Utc::now().to_rfc3339()])?;
+        Ok(())
+    }
+    pub fn next_response(&self) -> Result<Option<ResponseJob>> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn
+            .query_row(
+                "SELECT id,session,epoch,agent_name,instance_id,kind,output,speech FROM response_jobs
+            WHERE speech IS NULL ORDER BY created_at,rowid LIMIT 1",
+                [],
+                response_row,
+            )
+            .optional()?)
+    }
+    pub fn finish_response(&self, job: &ResponseJob, speech: &str) -> Result<bool> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE response_jobs SET speech=?2 WHERE id=?1 AND speech IS NULL",
+            params![job.id, speech],
+        )?;
+        if changed > 0 {
+            insert_message(
+                &tx,
+                &job.session,
+                "assistant",
+                Some(&job.agent_name),
+                &job.kind,
+                speech,
+            )?;
+        }
+        tx.commit()?;
+        Ok(changed > 0)
+    }
+    pub fn latest_response(&self, session: &str, agent: &str) -> Result<Option<ResponseJob>> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn
+            .query_row(
+                "SELECT id,session,epoch,agent_name,instance_id,kind,output,speech FROM response_jobs
+            WHERE session=?1 AND agent_name=?2 ORDER BY created_at DESC,rowid DESC LIMIT 1",
+                params![session, agent],
+                response_row,
+            )
+            .optional()?)
+    }
+    pub fn begin_delivery(
+        &self,
+        id: &str,
+        session: &str,
+        agent: &str,
+        request: &Value,
+    ) -> Result<()> {
+        self.conn.lock().unwrap().execute(
+            "INSERT INTO deliveries VALUES(?1,?2,?3,?4,NULL,?5)",
+            params![
+                id,
+                session,
+                agent,
+                request.to_string(),
+                Utc::now().to_rfc3339()
+            ],
+        )?;
+        Ok(())
+    }
+    pub fn finish_delivery(
+        &self,
+        id: &str,
+        session: &str,
+        agent: &str,
+        result: &Value,
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let text = result.to_string();
+        if tx.execute(
+            "UPDATE deliveries SET result=?2 WHERE id=?1 AND result IS NULL",
+            params![id, text],
+        )? > 0
+        {
+            insert_message(&tx, session, "tool", Some(agent), "tool_result", &text)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+}
+fn insert_message(
+    conn: &Connection,
+    session: &str,
+    role: &str,
+    agent: Option<&str>,
+    kind: &str,
+    content: &str,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO conversation_messages(role,content,agent_name,kind,created_at,session)
+        VALUES(?1,?2,?3,?4,?5,?6)",
+        params![role, content, agent, kind, Utc::now().to_rfc3339(), session],
+    )?;
+    Ok(())
+}
+fn response_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ResponseJob> {
+    Ok(ResponseJob {
+        id: r.get(0)?,
+        session: r.get(1)?,
+        epoch: r.get(2)?,
+        agent_name: r.get(3)?,
+        instance_id: r.get(4)?,
+        kind: r.get(5)?,
+        output: r.get(6)?,
+        speech: r.get(7)?,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn existing_herdr_columns_migrate_without_losing_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.sqlite");
+        let old = Connection::open(&path).unwrap();
+        old.execute_batch("CREATE TABLE conversation_messages(id INTEGER PRIMARY KEY, role TEXT NOT NULL, content TEXT NOT NULL, agent_name TEXT, kind TEXT NOT NULL, created_at TEXT NOT NULL, herdr_session TEXT NOT NULL);
+            INSERT INTO conversation_messages VALUES(1,'user','Keep this','agent','utterance','now','toad:one');
+            INSERT INTO conversation_messages VALUES(2,'assistant','Other agent','agent-two','agent_response','now','toad:two');
+            CREATE TABLE response_jobs(id TEXT PRIMARY KEY, session TEXT NOT NULL, epoch TEXT NOT NULL, agent_name TEXT NOT NULL, pane_id TEXT NOT NULL, kind TEXT NOT NULL, output TEXT NOT NULL, speech TEXT, created_at TEXT NOT NULL);
+            INSERT INTO response_jobs VALUES('job','toad:one','epoch','agent','instance','agent_response','Done',NULL,'now');
+            CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+            INSERT INTO settings VALUES('selected_herdr_session','toad:one');").unwrap();
+        drop(old);
+        let db = Database::open(&path).unwrap();
+        let history = db.history("toad", 10).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].content, "Keep this");
+        assert_eq!(history[1].content, "Other agent");
+        assert_eq!(db.next_response().unwrap().unwrap().instance_id, "instance");
+        assert_eq!(db.next_response().unwrap().unwrap().session, "toad");
+        assert!(db.setting("selected_session").unwrap().is_none());
+        assert!(db.setting("selected_herdr_session").unwrap().is_none());
+    }
+    #[test]
+    fn response_queue_and_history_survive_restart_without_duplicates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        let db = Database::open(&path).unwrap();
+        let job = ResponseJob {
+            id: "one".into(),
+            session: "work".into(),
+            epoch: "epoch".into(),
+            agent_name: "agent".into(),
+            instance_id: "pane".into(),
+            kind: "agent_response".into(),
+            output: "Tests passed".into(),
+            speech: None,
+        };
+        db.capture(&job).unwrap();
+        db.capture(&job).unwrap();
+        drop(db);
+        let db = Database::open(&path).unwrap();
+        assert_eq!(db.next_response().unwrap().unwrap().output, "Tests passed");
+        assert!(db.finish_response(&job, "The tests passed.").unwrap());
+        assert!(!db.finish_response(&job, "Duplicate").unwrap());
+        assert!(db.next_response().unwrap().is_none());
+        assert_eq!(db.history("work", 20).unwrap().len(), 1);
+        assert!(db.history("other", 20).unwrap().is_empty());
+        assert!(db.latest_response("other", "agent").unwrap().is_none());
+    }
+    #[test]
+    fn interrupted_delivery_is_recorded_once_as_uncertain() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.sqlite");
+        let db = Database::open(&path).unwrap();
+        db.begin_delivery("op", "work", "agent", &json!({"request":"test"}))
+            .unwrap();
+        drop(db);
+        let db = Database::open(&path).unwrap();
+        let history = db.history("work", 20).unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].content.contains("controller_restarted"));
+        assert!(history[0].content.contains("unconfirmed"));
+        drop(db);
+        assert_eq!(
+            Database::open(&path)
+                .unwrap()
+                .history("work", 20)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Orchrd Activity
+Comment=Live agent lanes, routing, and voice pipeline
+Exec=orchrd-activity
+Icon=orchrd
+Terminal=false
+Type=Application
+Categories=Development;Utility;

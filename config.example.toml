@@ -1,10 +1,5 @@
 [commands]
 voxtype = "voxtype"
-herdr = "herdr"
-codex = "codex"
-
-[herdr]
-poll_interval_ms = 2000
 
 [intent]
 base_url = "https://api.openai.com/v1"
@@ -12,33 +7,24 @@ model = "gpt-5-mini"
 api_key_env = "ORCHRD_API_KEY"
 timeout_seconds = 60
 
-[conversation]
-# All messages remain in SQLite. Only this many recent messages are sent to the
-# conversational model on each turn; Orchrd does not compact older messages.
-max_messages = 30
-max_tool_rounds = 6
-max_tool_output_chars = 6000
-
-[discovery]
-roots = ["/home/kacper/Documents/Projects"]
+[routing]
+# Full System One decision API URL (`url` is also accepted).
+endpoint = "http://192.168.1.104:8009/v1/systemone"
+model = "kev-latest"
+api_key = "" # Optional Bearer token; leave empty for an unauthenticated server.
+timeout_seconds = 30
 
 [voice]
 announcement_mode = "muted"
-max_recording_seconds = 60
+# Maximum wait for transcription after releasing push-to-talk.
+transcription_timeout_seconds = 60
 
 [tts]
+provider = "pocket" # Or "openai_compatible"; see README for [tts.api].
 language = "english_2026-04"
 model_config = "/home/kacper/.local/share/orchrd/pocket-tts/english_2026-04.yaml"
 voice = "/home/kacper/.local/share/orchrd/pocket-tts/alba.safetensors"
 quantize = true
 
-[summary]
-cloud_context = "rich"
-max_terminal_lines = 300
-include_diff = true
-
-[[projects]]
-id = "orchrd"
-name = "Orchrd"
-path = "/home/kacper/Documents/Projects/orchrd"
-goal = "Build the voice-driven coding-agent controller"
+[stt]
+provider = "voxtype" # Or "openai_compatible"; see README for [stt.api].
