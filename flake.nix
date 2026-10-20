@@ -27,8 +27,6 @@
     in
     {
       homeManagerModules.default = module;
-      nixosModules.default = import ./nix/nixos-module.nix self home-manager;
-      nixosModules.apple-tv-remote = import ./apple_tv_remote/apple-remote.nix;
     }
     // flake-utils.lib.eachDefaultSystem (
       system:

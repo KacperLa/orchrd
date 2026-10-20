@@ -6,13 +6,13 @@
   system,
 }:
 let
+  remote = (import ../apple_tv_remote/flake.nix).outputs { self = remote; };
   host =
     extra:
     (nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        self.nixosModules.default
-        self.nixosModules.apple-tv-remote
+        remote.nixosModules.default
         {
           system.stateVersion = "26.05";
           fileSystems."/" = {
@@ -24,28 +24,18 @@ let
             isNormalUser = true;
             uid = 1234;
           };
-          home-manager.useGlobalPkgs = true;
-          services.orchrd.package = pkgs.hello;
         }
         extra
       ];
     }).config;
   disabled = host { };
   enabled = host {
-    services.orchrd = {
-      enable = true;
-      user = "alice";
-      enableCodex = true;
-      startCodexServer = true;
-      environmentFile = "/run/secrets/orchrd";
-    };
     services.apple-tv-remote = {
       enable = true;
       user = "alice";
       macAddress = "AA:BB:CC:DD:EE:FF";
     };
   };
-  services = enabled.home-manager.users.alice.systemd.user.services;
   standalone = home-manager.lib.homeManagerConfiguration {
     inherit pkgs;
     modules = [
@@ -59,12 +49,16 @@ let
         services.orchrd = {
           enable = true;
           package = pkgs.hello;
+          enableCodex = true;
+          startCodexServer = true;
+          environmentFile = "/run/secrets/orchrd";
         };
       }
     ];
   };
+  services = standalone.config.systemd.user.services;
 in
-assert !(disabled.home-manager.users ? alice);
+assert !(disabled ? home-manager);
 assert !(disabled.systemd.services ? apple-remote-mouse);
 assert pkgs.lib.asserts.assertMsg (builtins.all (a: a.assertion) enabled.assertions) (
   builtins.toJSON (map (a: a.message) (builtins.filter (a: !a.assertion) enabled.assertions))
@@ -76,5 +70,5 @@ assert enabled.systemd.services.apple-remote-mouse.serviceConfig.User == "alice"
 assert enabled.systemd.services.apple-remote-mic.environment.XDG_RUNTIME_DIR == "/run/user/1234";
 assert pkgs.lib.hasInfix "--mac AA:BB:CC:DD:EE:FF"
   enabled.systemd.services.apple-remote-mic.serviceConfig.ExecStart;
-assert standalone.config.systemd.user.services ? orchrd;
+assert !(enabled.systemd.services ? orchrd);
 pkgs.runCommand "orchrd-module-evaluation" { } "touch $out"

@@ -8,7 +8,7 @@
   package = lib.mkOption {
     type = lib.types.package;
     default = package;
-    description = "Orchrd package to install and run";
+    description = "Orchrd package to install and run in the user's session";
   };
   configFile = lib.mkOption {
     type = lib.types.str;
