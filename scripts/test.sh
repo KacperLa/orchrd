@@ -16,8 +16,9 @@ cd -- "$repo_root"
 
 # Always enter the pinned shell, even from another project's development shell.
 # The commands run from the working tree, including uncommitted source changes.
-exec nix develop "$repo_root" --command bash -euo pipefail -c '
+exec nix develop "path:$repo_root" --command bash -euo pipefail -c '
     export PYTHONDONTWRITEBYTECODE=1
+    export ORCHRD_SKIP_CALLGRAPH=1
 
     echo "Checking Rust formatting..."
     cargo fmt --all -- --check
@@ -31,6 +32,10 @@ exec nix develop "$repo_root" --command bash -euo pipefail -c '
     echo "Running GNOME extension tests..."
     env -u GI_TYPELIB_PATH -u GIO_EXTRA_MODULES -u GIO_MODULE_DIR \
         gjs extension/test-lifecycle.js
+
+    echo "Running coding-agent adapter tests..."
+    env -u PYTHONPATH -u PYTHONHOME \
+        "$ORCHRD_BRIDGE_PYTHON" -m unittest discover -s adapters
 
     echo "Running TTS worker tests..."
     env -u PYTHONPATH -u PYTHONHOME \

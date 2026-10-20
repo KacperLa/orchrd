@@ -9,40 +9,46 @@
 </p>
 
 <p align="center">
-  Connect NOBS sessions, hold a key, and move work forward by voice.
+  Connect Codex or NOBS sessions, hold a key, and move work forward by voice.
 </p>
 
 Orchrd turns GNOME into a lightweight voice interface for software work. It
-uses configurable speech providers (Voxtype and Pocket TTS by default),
+uses a configured speech-to-text API and Pocket TTS by default,
 classifies your request with a System One decision model, and
-routes work across all connected NOBS sessions. When a coding agent needs input, Orchrd asks
+routes work across connected Codex and NOBS sessions. When a coding agent needs input, Orchrd asks
 you. When the work finishes, it can speak a short summary or stay silent and
 show a notification.
 
 Orchrd is deliberately small. It is not another coding agent and it does not
 replace your terminal workflow. It is the layer that keeps several projects
-moving while your hands and attention are elsewhere. NOBS owns sessions
+moving while your hands and attention are elsewhere. Codex and NOBS own sessions
 and agents; Orchrd has no separate project registry.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    Voice[You speak] --> Shell[GNOME extension]
-    Shell --> STT[STT provider]
+    Voice[You speak] --> Input[GNOME shortcut or Apple remote]
+    Input --> Capture[Controller: PipeWire capture]
+    Capture --> STT[Transcription API]
     STT --> Router[Orchrd controller]
     Router --> Decision[Kev: operation and target]
     Decision --> Draft[LLM: request text only]
     Draft --> Execute[Controller: execute once]
-    Execute --> Frontend[Connected NOBS sessions]
-    Frontend --> Agent[Coding agents]
-    Agent --> Summary[Response summary]
+    Execute --> Bridge[Local agent bridge]
+    Bridge <--> NOBS[Patched NOBS sessions]
+    Bridge <--> Adapter[orchrd-codex adapter]
+    Adapter <--> Server[Shared Codex app server]
+    Terminal[orchrd codex terminal] <--> Server
+    NOBS --> Summary[Response summary]
+    Server --> Summary
     Summary --> TTS[TTS provider]
     TTS --> Voice
 ```
 
 1. Hold <kbd>Print Screen</kbd> while speaking.
-2. Orchrd records and transcribes the utterance using the selected STT provider.
+2. Orchrd captures the PipeWire microphone and sends the audio to the configured
+   transcription API after key release.
 3. Kev chooses the operation and named target. The controller resolves target
    fallbacks from the live roster and last-interacted agent.
 4. Orchrd sends a cleaned, non-speculative request to the appropriate connected agent.
@@ -51,7 +57,7 @@ flowchart LR
    controls. Delivery acknowledgements are based on the frontend's receipt and
    observed state changes.
 6. When an agent responds, Orchrd summarizes the structured final message from
-   NOBS, including turns started directly in the NOBS TUI.
+   the connected frontend, including turns started directly in its terminal.
 7. Depending on the selected mode, the selected TTS provider speaks the result immediately or
    Orchrd stays muted and plays a notification sound.
 
@@ -78,7 +84,7 @@ memory. History remains in SQLite for inspection. Legacy `[conversation]`
 settings remain accepted for compatibility but no longer control a tool loop.
 
 Sending work, reading agent output, approving or denying a prompt, and
-cancelling work are separate tool operations. NOBS creates and owns its sessions;
+cancelling work are separate tool operations. Codex and NOBS create and own their sessions;
 Orchrd interacts only with agents already present. Tool results distinguish message
 delivery from an observed agent response: delivery alone does not prove that work
 started or an approval succeeded. Unconfirmed operations are never automatically
@@ -88,7 +94,7 @@ lists.
 
 ### Runtime architecture
 
-One coordinator owns application state. NOBS is the source of
+One coordinator owns application state. Connected frontends are the source of
 live agent status; Orchrd does not maintain a second set of coding-task states.
 
 - Each interactive NOBS process connects through a private local socket,
@@ -96,6 +102,10 @@ live agent status; Orchrd does not maintain a second set of coding-task states.
   final responses, and structured permission requests. Orchrd sends prompts,
   cancellation, and exact permission selections back over that connection; it
   never scrapes terminal output.
+- For Codex, the `orchrd codex` wrapper opens a terminal client on the shared
+  app server. The separate `orchrd-codex` adapter connects to that same server
+  over a Unix WebSocket and registers loaded top-level threads with the local
+  agent bridge. Terminal and voice commands operate on the same sessions.
 - A summary worker processes those responses, appends each summary to the
   shared conversation history once, and queues speech when auto-speak is on.
   One speech worker plays responses in order. Slow model calls or audio playback
@@ -106,10 +116,14 @@ live agent status; Orchrd does not maintain a second set of coding-task states.
   promises resolve from delivery receipts and observed status changes, or expire
   with an explicit unconfirmed outcome. Sending to an already-working agent
   confirms delivery only, not that the new request has begun.
+- Approval controls carry the exact pending question ID. A voice turn remembers
+  which permissions were pending when it began, so a delayed response cannot
+  approve a newer request. Bridge messages and work queues have explicit limits;
+  a full speech queue leaves the response available in history.
 
 Pending summaries survive service restarts, but old audio is not replayed.
-Interrupted deliveries are recorded as unconfirmed and are not retried. NOBS
-sends final output and permission requests directly; Orchrd polls its local
+Interrupted deliveries are recorded as unconfirmed and are not retried. Frontends
+send final output and permission requests directly; Orchrd polls its local
 bridge only for the latest roster and status snapshot.
 
 ## Components
@@ -117,29 +131,32 @@ bridge only for the latest roster and status snapshot.
 | Component | Responsibility |
 | --- | --- |
 | `orchrdd` | Rust controller, deterministic dispatch, state reconciliation, approvals, and D-Bus API |
+| `orchrd codex` | Terminal launcher connecting Codex to the shared app server |
+| `orchrd-codex` | Adapter registering shared Codex threads with the local agent bridge |
 | GNOME extension | Panel menu, push-to-talk shortcuts, status, and notifications |
 | `orchrd-activity` | Native GTK4 activity window rendering coordinator snapshots over D-Bus |
 | `orchrd-tts` | Persistent local Pocket TTS worker with ordered playback |
-| Voxtype | Recording and speech-to-text |
+| STT API | Speech-to-text from PipeWire microphone capture |
 | NOBS | Interactive coding-agent TUI; a patched local process registers itself with Orchrd |
+| Apple remote services | Optional Bluetooth touchpad and microphone input; source and Nix module in `apple_tv_remote/` |
 | Kev | System One classification of operation and named target |
 | Request/summary LLM | Drafts request text and summarizes agent output |
-| Coding models | Coding, repository inspection, and implementation inside NOBS |
+| Coding models | Coding, repository inspection, and implementation inside Codex or NOBS |
 
-The patched NOBS build is required; Voxtype is needed only for local STT. Orchrd
-does not install or configure the coding models used by NOBS.
+Use a shared Codex app server, a patched NOBS build, or both. Orchrd does not
+install or configure the coding models used by either frontend.
 
 ## Requirements
 
 - Nix with flakes enabled
 - NixOS with Home Manager
 - GNOME Shell 50 or 51 (including 51 prereleases)
-- A working `voxtype` command and user service (local STT), or a compatible STT API
-- A patched NOBS build with native Orchrd bridge support
-- At least one interactive NOBS session
+- An OpenAI-compatible audio transcription API
+- A shared Codex app server with its adapter, or a patched NOBS build with native
+  Orchrd bridge support, and at least one connected session
 - A reachable System One endpoint configured in `[routing]`
-- An OpenAI-compatible chat-completions endpoint with tool-calling support and
-  an API key
+- An OpenAI-compatible chat-completions endpoint for request drafting and summaries,
+  with credentials if required by the provider
 - Pocket TTS assets stored locally, or a compatible TTS API
 
 ## Setup
@@ -177,6 +194,8 @@ The module installs Orchrd into the user profile and creates two user services:
 
 NOBS sessions register with Orchrd while both programs run. Orchrd does not
 start or stop NOBS, and no session selection is needed.
+For Codex, enable the adapter and optionally the shared app-server service as
+described in [Codex sessions](#codex-sessions).
 
 ### 2. Create the configuration file
 
@@ -197,13 +216,18 @@ model = "gpt-5-mini"
 api_key_env = "ORCHRD_API_KEY"
 
 [routing]
-endpoint = "http://192.168.1.104:8009/v1/systemone"
+endpoint = "http://127.0.0.1:8009/v1/systemone"
 model = "kev-latest"
 api_key = "" # Set the decision API's Bearer token here if required.
 timeout_seconds = 30
 
 [voice]
 announcement_mode = "muted"
+
+[stt.api]
+base_url = "http://127.0.0.1:8000/v1" # Replace with your STT API root.
+model = "your-stt-model"
+timeout_seconds = 60
 
 [tts]
 language = "english_2026-04"
@@ -212,20 +236,22 @@ voice = "/home/you/.local/share/orchrd/pocket-tts/voice.safetensors"
 quantize = true
 ```
 
-No project paths or discovery roots are required. Start the patched interactive
-NOBS binary normally; Orchrd discovers every running instance automatically.
+No project paths or discovery roots are required. Launch `orchrd codex` against
+the shared app server, or start the patched interactive NOBS binary normally.
+The Codex adapter discovers loaded threads; NOBS instances register themselves.
 
 `routing.endpoint` is the complete decision API URL, including `/v1/systemone`;
 `routing.url` is an alias. An omitted or empty `routing.api_key` sends no
 Authorization header. Restart `orchrd.service` after changing these settings.
 
-When updating an older configuration, rename `[voice].max_recording_seconds`
-to `transcription_timeout_seconds`, and remove `[summary].cloud_context` and
-`include_diff`. These obsolete keys are now rejected to avoid silently ignoring
-settings. The transcription timeout starts after recording stops; it does not
-limit how long you can hold push-to-talk. Existing SQLite conversation history
-is preserved. Former run and agent-binding tables are no longer used; live
-agents are discovered directly from their bridge connections.
+When updating an older configuration, remove `[commands].voxtype`,
+`[stt].provider`, `[voice].voxtype_state_file`, and
+`[voice].transcription_timeout_seconds`, then configure `[stt.api]`.
+`stt.api.timeout_seconds` controls the transcription request; microphone capture
+is limited to two minutes. Remove `[summary].cloud_context` and `include_diff`.
+Existing SQLite conversation history is preserved. Former run and agent-binding
+tables are no longer used; live agents are discovered directly from their bridge
+connections.
 
 ### 3. Provide the API key
 
@@ -241,18 +267,13 @@ Log out and back in after creating it, or import the variable into the current
 user manager before restarting Orchrd. Do not place secrets directly in a Nix
 module because Nix store contents are world-readable.
 
-### Optional: use remote or self-hosted speech providers
+### Optional: use hosted speech APIs
 
-STT and TTS are independent: keep either local, or select `openai_compatible`.
-Existing configurations default to Voxtype and Pocket TTS. There is no automatic
-fallback between local and remote services.
-
-For example, replace the corresponding sections of your config with:
+STT always uses the configured audio transcription API, which may be local or
+hosted. TTS uses Pocket TTS by default or an OpenAI-compatible speech API.
+For example, configure hosted STT and TTS with:
 
 ```toml
-[stt]
-provider = "openai_compatible"
-
 [stt.api]
 base_url = "https://api.openai.com/v1"
 model = "gpt-4o-mini-transcribe"
@@ -279,8 +300,8 @@ requires streaming raw **24 kHz, mono, signed 16-bit little-endian PCM**. Set ea
 For an unauthenticated local server, omit `api_key_env`. Use HTTPS for remote
 servers. Models and voice names depend on the provider.
 
-Push-to-talk and its shortcut are unchanged. With remote STT, Orchrd captures the
-default PipeWire microphone into memory, stops on key release, then uploads a WAV.
+Push-to-talk and its shortcut are unchanged. Orchrd captures the default
+PipeWire microphone into memory, stops on key release, then uploads a WAV.
 Recordings are limited to two minutes and discarded after transcription or
 cancellation; no recording file is stored. STT is **not live-streaming**. Remote
 TTS plays incoming audio chunks without buffering the whole utterance, and PTT
@@ -349,6 +370,7 @@ gnome-extensions enable "$orchrd_uuid"
 ```bash
 systemctl --user status orchrd.service
 systemctl --user status orchrd-tts.service
+orchrdctl doctor
 orchrdctl status
 ```
 
@@ -357,11 +379,11 @@ orchrdctl status
 The default push-to-talk key is <kbd>Print Screen</kbd>. Hold it while speaking
 and release it to transcribe and route the request.
 
-Each patched NOBS instance registers its live session. Orchrd monitors all connected
+The Codex adapter and patched NOBS instances register their live sessions. Orchrd monitors all connected
 sessions and shows them in the panel without a picker.
 
-Orchrd also watches responses from turns you start directly in NOBS,
-not just requests sent by voice. NOBS sends final responses and
+Orchrd also watches responses from turns you start directly in Codex or NOBS,
+not just requests sent by voice. The frontends send final responses and
 permission requests as structured events. Orchrd records a short summary
 and speaks it if **Auto speak results** is enabled. It does not read terminal
 scrollback.
@@ -395,6 +417,11 @@ steering an observed active turn, cancellation, completion announcements,
 command/file approvals, and ordinary user questions. Multiple questions are
 answered one at a time; the combined answer goes back to the original Codex
 request. An answer made in the Codex terminal clears the pending voice question.
+
+Sessions appear under their Codex titles, and renaming a session updates its
+display name in Orchard. Untitled sessions use their working directory name,
+or `Codex session` when no directory is available. Internal IDs keep routing
+distinct sessions with the same title.
 
 The terminal and adapter must use **the same app server**. This does not attach
 to an arbitrary independent Codex process. Existing history is not read aloud
@@ -435,11 +462,11 @@ Without Home Manager, run each long-lived process in a separate terminal:
 
 ```bash
 # Server (skip if your shared Codex daemon is already running):
-codex app-server --listen unix://
+codex app-server --listen "unix://$XDG_RUNTIME_DIR/orchrd-codex.sock"
 # Orchard adapter:
-orchrd-codex
+orchrd-codex --codex-socket "$XDG_RUNTIME_DIR/orchrd-codex.sock"
 # Interactive client:
-codex --remote unix://
+ORCHRD_CODEX_SOCKET="$XDG_RUNTIME_DIR/orchrd-codex.sock" orchrd codex
 ```
 
 Use `orchrd-codex --codex-socket /path/to/socket` for a custom server socket.
@@ -470,7 +497,8 @@ The patched local NOBS checkout connects to Orchrd automatically from ordinary
 interactive mode. Each process receives a unique `nobs:<pid>:<random>` identifier
 in Orchrd's roster. Text entered in NOBS and requests sent by voice reach the
 **same session and transcript**. NOBS reports exact lifecycle state, final assistant
-text, and structured permission requests; voice approvals select its real
+text, and structured permission requests. Approval commands carry the exact
+pending question ID; stale controls are rejected. Voice approvals select its real
 `allow_once` or `reject_once` option. For multiple-choice questions, Orchrd reads
 all numbered options without summary truncation. Reply with an option number,
 label, multiple selections when offered, or your own answer when allowed.
@@ -499,6 +527,28 @@ To change the shortcuts:
 gsettings set org.gnome.shell.extensions.orchrd push-to-talk "['Print']"
 ```
 
+### Apple TV remote input
+
+[`apple_tv_remote/`](apple_tv_remote/) contains copies of the deployed Apple TV
+remote mouse and microphone scripts, plus their NixOS service module. The scripts
+match the Nix store versions used by the running services when copied into this
+repository. They are separate system services from the Home Manager user services.
+
+- `apple_remote_mouse.py` connects the Bluetooth remote and translates touchpad
+  reports into mouse input through uinput.
+- `apple_remote_mic.py` decodes the remote's Opus audio into a virtual PipeWire
+  microphone. Holding Siri selects that microphone and calls `orchrdctl start`;
+  releasing Siri calls `orchrdctl stop` after draining the audio, then restores
+  the previous input unless the user selected another source during dictation.
+- `apple-remote.nix` configures both services, device access, dependencies, and
+  Bluetooth monitoring capabilities.
+
+To deploy these copies, import `apple_tv_remote/apple-remote.nix` from your NixOS
+configuration and rebuild. Review its host-specific username, UID, profile path,
+and the default Bluetooth MAC in both scripts first. The microphone service needs
+the user's PipeWire session and an installed `orchrdctl`. Copying the files into
+this repository does not switch the running services to this location.
+
 ## Native activity window
 
 Launch **Orchrd Activity** from GNOME, select **Open activity** in the panel,
@@ -506,8 +556,8 @@ or run `orchrd-activity`. It uses GTK4 and Cairo through PyGObject—no browser,
 web server, or separate model interpreting logs.
 
 The graph has an Orchrd lane and a lane per agent. Endpoints render the actual
-NOBS status: blue/spinning for working, gray for idle, green/pulsing for done,
-and amber for blocked. Status-transition nodes retain what NOBS reported;
+frontend status: blue/spinning for working, gray for idle, green/pulsing for done,
+and amber for blocked. Status-transition nodes retain what the frontend reported;
 delivery acceptance never changes an agent's endpoint.
 
 Coordinator-owned nodes expose utterance/transcription, model waiting, exact tool
@@ -527,7 +577,7 @@ are still pending. Large detail payloads are explicitly marked as truncated.
 The underlying conversation history and captured-response queue remain in SQLite.
 
 This displays tool decisions and their observable results, not hidden model
-reasoning. NOBS sends responses directly; the current agent roster and status
+reasoning. Frontends send responses directly; the current agent roster and status
 are sampled from the local bridge.
 
 ## Command-line controls
@@ -546,6 +596,13 @@ orchrdctl cancel
 ```
 
 ## Diagnostics
+
+Run `orchrdctl doctor` (or `orchrdctl doctor /path/to/config.toml`) before starting
+services to check endpoint URLs, positive timeouts, API credentials, and readable,
+nonempty local TTS configuration and voice files. It runs without D-Bus or a
+running daemon; it does not contact providers or load model weights. The daemon
+performs these checks at startup too. Remote TTS skips local asset checks. Set
+`intent.api_key_env = ""` for an unauthenticated local intent service.
 
 Follow controller logs, including failed conversational tool calls:
 
@@ -580,13 +637,17 @@ From a fresh terminal, run all tests and code checks with:
 ```
 
 The script enters the pinned Nix development shell automatically and runs Rust
-formatting checks, tests, Clippy, GNOME extension tests, TTS worker tests, and
+formatting checks, tests, Clippy, GNOME extension tests, coding-agent adapter tests, TTS worker tests, and
 headless GTK viewer tests. It stops at the first failure without reformatting
-files or restarting services. No API keys or running Orchrd instance are needed.
+files or restarting services. No API keys or running Orchrd instance are needed. Tests include untracked working-tree files and skip call-graph regeneration.
 You can also invoke it by its absolute path from another directory. The first
 run may download Nix dependencies; it does not install them into your profile.
 
 For an interactive development shell, use `nix develop`.
+In that shell, successful `cargo build`, `cargo check`, `cargo test`, and
+`cargo clippy` commands regenerate the [static call graph](docs/call-graph/README.md).
+`cargo run` and `cargo bench` regenerate it before starting the program.
+You can also run `python3 scripts/regenerate_call_graph.py` in the shell.
 
 Build the complete package, including the extension and TTS worker:
 

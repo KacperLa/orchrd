@@ -1,14 +1,6 @@
-use crate::{
-    config::{Config, SttProvider},
-    speech_api::AudioApi,
-    voxtype::Voxtype,
-};
+use crate::{config::Config, speech_api::AudioApi};
 use anyhow::{bail, Context, Result};
-use std::{
-    path::{Path, PathBuf},
-    process::Stdio,
-    sync::Arc,
-};
+use std::{process::Stdio, sync::Arc};
 use tokio::{
     io::AsyncReadExt,
     process::{Child, Command},
@@ -21,13 +13,12 @@ const MAX_AUDIO_BYTES: usize = 120 * 16_000 * 2;
 
 #[derive(Clone)]
 pub(crate) struct SttClient {
-    local: Voxtype,
-    remote: Option<AudioApi>,
+    api: AudioApi,
     capture: Arc<Mutex<Option<Capture>>>,
 }
 
 struct Capture {
-    token: PathBuf,
+    token: String,
     stop: Option<oneshot::Sender<()>>,
     reader: JoinHandle<Result<Vec<u8>>>,
 }
@@ -42,25 +33,14 @@ impl Drop for Capture {
 impl SttClient {
     pub fn new(config: &Config) -> Result<Self> {
         Ok(Self {
-            local: Voxtype::new(
-                config.commands.voxtype.clone(),
-                config.voxtype_state_file(),
-                Config::runtime_dir(),
-                config.voice.transcription_timeout_seconds,
-            ),
-            remote: (config.stt.provider == SttProvider::OpenaiCompatible)
-                .then(|| AudioApi::new(&config.stt.api))
-                .transpose()?,
+            api: AudioApi::new(&config.stt.api)?,
             capture: Arc::new(Mutex::new(None)),
         })
     }
 
-    pub async fn start(&self, id: &str) -> Result<PathBuf> {
-        let Some(api) = &self.remote else {
-            return self.local.start(id).await;
-        };
+    pub async fn start(&self, id: &str) -> Result<()> {
         // Check credentials before opening the microphone.
-        let _ = api.post("transcriptions")?;
+        let _ = self.api.post("transcriptions")?;
         let mut active = self.capture.lock().await;
         if active.is_some() {
             bail!("previous recording is still being processed");
@@ -100,33 +80,27 @@ impl SttClient {
             }
             Ok(audio)
         });
-        let token = PathBuf::from(id);
         *active = Some(Capture {
-            token: token.clone(),
+            token: id.to_owned(),
             stop: Some(stop),
             reader,
         });
-        Ok(token)
+        Ok(())
     }
 
     /// Stop microphone capture at key release, before waiting for the turn queue.
     pub async fn stop_capture(&self) -> Result<()> {
-        if self.remote.is_some() {
-            if let Some(capture) = self.capture.lock().await.as_mut() {
-                if let Some(stop) = capture.stop.take() {
-                    let _ = stop.send(());
-                }
+        if let Some(capture) = self.capture.lock().await.as_mut() {
+            if let Some(stop) = capture.stop.take() {
+                let _ = stop.send(());
             }
         }
         Ok(())
     }
 
-    pub async fn stop_and_wait(&self, token: &Path) -> Result<String> {
-        let Some(api) = &self.remote else {
-            return self.local.stop_and_wait(token).await;
-        };
+    pub async fn stop_and_wait(&self, token: &str) -> Result<String> {
         let mut active = self.capture.lock().await;
-        if active.as_ref().map(|c| c.token.as_path()) != Some(token) {
+        if active.as_ref().map(|c| c.token.as_str()) != Some(token) {
             bail!("recording no longer exists");
         }
         let mut capture = active.take().unwrap();
@@ -137,13 +111,10 @@ impl SttClient {
         let pcm = (&mut capture.reader)
             .await
             .context("audio capture task failed")??;
-        transcribe(api, &pcm).await
+        transcribe(&self.api, &pcm).await
     }
 
     pub async fn cancel(&self) -> Result<()> {
-        if self.remote.is_none() {
-            return self.local.cancel().await;
-        }
         // Dropping the capture aborts its task and kills its recording process.
         self.capture.lock().await.take();
         Ok(())

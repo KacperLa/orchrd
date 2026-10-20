@@ -1,11 +1,18 @@
 use anyhow::{bail, Result};
-use orchrd::{DBUS_NAME, DBUS_PATH};
+use orchrd::{config::Config, DBUS_NAME, DBUS_PATH};
 use zbus::Proxy;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("status");
+    if command == "doctor" {
+        let path = args.get(1).map(std::path::Path::new);
+        let config = Config::load(path)?;
+        config.validate_runtime()?;
+        println!("Configuration, API credentials, and local TTS assets passed checks.");
+        return Ok(());
+    }
     let conn = zbus::Connection::session().await?;
     let proxy = Proxy::new(&conn, DBUS_NAME, DBUS_PATH, "io.github.kacper.Orchrd1").await?;
     match command {
@@ -43,7 +50,7 @@ async fn main() -> Result<()> {
                 .call::<_, _, ()>("DispatchText", &(text.as_str(),))
                 .await?
         }
-        _ => bail!("usage: orchrdctl [status|start|stop|cancel|repeat-last|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
+        _ => bail!("usage: orchrdctl [doctor [CONFIG]|status|start|stop|cancel|repeat-last|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
     };
     Ok(())
 }

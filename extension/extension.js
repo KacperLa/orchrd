@@ -75,7 +75,8 @@ class OrchrdIndicator extends PanelMenu.Button {
     }
 
     update(snapshot) {
-        const agent = snapshot.active_agent ? ` · ${snapshot.active_agent}` : '';
+        const active = (snapshot.agents ?? []).find(a => a.agent_name === snapshot.active_agent);
+        const agent = snapshot.active_agent ? ` · ${active?.display_name || snapshot.active_agent}` : '';
         this._status.label.text = `${snapshot.state}${agent}`;
         const agents = snapshot.agents ?? [];
         this._agents.removeAll();
@@ -161,7 +162,8 @@ export default class OrchrdExtension extends Extension {
             connect('CompletionFinished', (_p, _sender, [agent_name, speech]) => {
                 if (!this.settings.get_boolean('auto-speak'))
                     this._ding('complete');
-                Main.notify(`Orchrd · ${agent_name || 'Agent finished'}`, speech);
+                const agent = this._snapshot?.agents?.find(a => a.agent_name === agent_name);
+                Main.notify(`Orchrd · ${agent?.display_name || agent_name || 'Agent finished'}`, speech);
             });
             connect('ApprovalRequired', (_p, _sender, [_id, message]) => {
                 this._ding('dialog-warning');

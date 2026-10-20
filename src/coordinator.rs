@@ -188,7 +188,7 @@ pub struct Coordinator {
     db: Arc<Database>,
     events: broadcast::Sender<Event>,
     snapshots: watch::Sender<Snapshot>,
-    speech: mpsc::UnboundedSender<Speech>,
+    speech: mpsc::Sender<Speech>,
     summaries: Arc<Notify>,
     observations: HashMap<String, Observation>,
     pending: HashMap<String, Pending>,
@@ -200,7 +200,7 @@ impl Coordinator {
         db: Arc<Database>,
         events: broadcast::Sender<Event>,
         snapshots: watch::Sender<Snapshot>,
-        speech: mpsc::UnboundedSender<Speech>,
+        speech: mpsc::Sender<Speech>,
         summaries: Arc<Notify>,
     ) -> Self {
         Self {
@@ -215,7 +215,7 @@ impl Coordinator {
             voice_token: None,
         }
     }
-    pub async fn run(mut self, mut messages: mpsc::UnboundedReceiver<Message>) -> Result<()> {
+    pub async fn run(mut self, mut messages: mpsc::Receiver<Message>) -> Result<()> {
         let mut tick = tokio::time::interval(Duration::from_millis(100));
         loop {
             tokio::select! {
@@ -283,15 +283,29 @@ impl Coordinator {
                 None,
             ),
         );
-        self.speech
-            .send(Speech {
-                scope: scope.clone(),
-                epoch: self.snapshot.speech_epoch,
-                id,
-                text,
-                automatic,
-            })
-            .context("speech worker stopped")
+        match self.speech.try_send(Speech {
+            scope: scope.clone(),
+            epoch: self.snapshot.speech_epoch,
+            id: id.clone(),
+            text,
+            automatic,
+        }) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                self.trace(Activity::new(
+                    format!("{id}/speech"),
+                    "speech",
+                    "skipped",
+                    true,
+                    json!({"reason":"speech queue is full"}),
+                ));
+                let _ = self.events.send(Event::Error(
+                    "Speech queue is full; response remains available in history.".into(),
+                ));
+                Ok(())
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => bail!("speech worker stopped"),
+        }
     }
     fn handle(&mut self, message: Message) -> Result<()> {
         match message {
@@ -483,11 +497,14 @@ impl Coordinator {
                         {
                             self.snapshot.active_agent = Some(job.agent_name.clone());
                         }
-                        if job.kind == "agent_question"
-                            && !serde_json::from_str::<crate::question::Question>(&job.output)
-                                .is_ok_and(|q| q.question_kind == "question")
+                        if let Some(question) =
+                            serde_json::from_str::<crate::question::Question>(&job.output)
+                                .ok()
+                                .filter(|q| {
+                                    job.kind == "agent_question" && q.question_kind == "permission"
+                                })
                         {
-                            let id=json!({"scope":scope,"agent_name":job.agent_name,"instance_id":job.instance_id}).to_string();
+                            let id=json!({"scope":scope,"agent_name":job.agent_name,"instance_id":job.instance_id,"question_id":question.question_id}).to_string();
                             let _ = self.events.send(Event::Approval {
                                 id,
                                 message: speech.clone(),
@@ -772,6 +789,53 @@ mod tests {
     use super::*;
 
     #[test]
+    fn full_speech_queue_marks_skipped_and_keeps_coordinator_available() {
+        let (mut c, _audio) = fixture();
+        let (speech, _queued_audio) = mpsc::channel(2);
+        c.speech = speech;
+        let scope = c.snapshot.scope.clone();
+        let capacity = c.speech.max_capacity();
+        for n in 0..=capacity {
+            c.queue_speech(&scope, n.to_string(), "Response".into(), true)
+                .unwrap();
+        }
+        assert_eq!(c.speech.capacity(), 0);
+        let skipped = c
+            .snapshot
+            .activity
+            .iter()
+            .find(|a| a.id == format!("{capacity}/speech"))
+            .unwrap();
+        assert_eq!(skipped.state, "skipped");
+        assert_eq!(skipped.detail["reason"], "speech queue is full");
+        c.publish();
+    }
+    #[test]
+    fn approval_notification_contains_exact_question_id() {
+        let (mut c, _audio) = fixture();
+        let mut events = c.events.subscribe();
+        let job = ResponseJob {
+            id: "permission-job".into(), session: c.snapshot.scope.session.clone(), epoch: c.snapshot.scope.epoch.clone(),
+            agent_name: "coder".into(), instance_id: "pane".into(), kind: "agent_question".into(),
+            output: json!({"question_id":"exact","question_kind":"permission","title":"Approval","body":"Write?","options":[],"multiple":false,"allow_custom":false}).to_string(), speech: None,
+        };
+        c.db.capture(&job).unwrap();
+        let (reply, mut received) = oneshot::channel();
+        c.handle(Message::Summarized {
+            job,
+            speech: "Write?".into(),
+            reply,
+        })
+        .unwrap();
+        received.try_recv().unwrap().unwrap();
+        let Event::Approval { id, .. } = events.try_recv().unwrap() else {
+            panic!("expected approval")
+        };
+        let reference: Value = serde_json::from_str(&id).unwrap();
+        assert_eq!(reference["question_id"], "exact");
+        assert_eq!(reference["instance_id"], "pane");
+    }
+    #[test]
     fn another_question_records_answer_without_claiming_work_resumed() {
         assert_eq!(
             operation_evidence(
@@ -810,12 +874,12 @@ mod tests {
             state_change_seq: Some(seq),
         }
     }
-    fn fixture() -> (Coordinator, mpsc::UnboundedReceiver<Speech>) {
+    fn fixture() -> (Coordinator, mpsc::Receiver<Speech>) {
         let db = Arc::new(Database::open(std::path::Path::new(":memory:")).unwrap());
         let snapshot = Snapshot::initial(AnnouncementMode::Auto);
         let (events, _) = broadcast::channel(32);
         let (snapshots, _) = watch::channel(snapshot.clone());
-        let (speech, rx) = mpsc::unbounded_channel();
+        let (speech, rx) = mpsc::channel(256);
         (
             Coordinator::new(
                 snapshot,

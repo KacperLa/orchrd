@@ -13,6 +13,7 @@ function assert(condition, message) {
 
 const proxies = [];
 let notifications = 0;
+let notificationTitle = null;
 class FakeProxy {
     constructor(_bus, _name, _path, ready) {
         this.ready = ready;
@@ -50,7 +51,7 @@ const ExtensionClass = new Function(
     {registerClass: klass => klass},
     {Button: class {}},
     class {},
-    {wm: {removeKeybinding() {}}, notify() { notifications++; }, notifyError() { notifications++; }}
+    {wm: {removeKeybinding() {}}, notify(title) { notifications++; notificationTitle = title; }, notifyError() { notifications++; }}
 );
 
 function begin(extension) {
@@ -70,6 +71,15 @@ first.ready(first, null);
 assert(first.signals.size === 4 && first.handlers.size === 1, 'all proxy subscriptions installed');
 const queuedSignals = [...first.signals.values()];
 const queuedOwner = [...first.handlers.values()][0];
+extension._snapshot = {agents: [{agent_name: 'codex:thread:generation', display_name: 'Builder'}]};
+extension._ding = () => {};
+const completion = queuedSignals.find(signal => signal.name === 'CompletionFinished');
+completion.callback(first, 'sender', ['codex:thread:generation', 'Tests pass.']);
+assert(notificationTitle === 'Orchrd · Builder', 'completion notification uses the session title');
+extension._snapshot.agents[0].display_name = 'Reviewer';
+completion.callback(first, 'sender', ['codex:thread:generation', 'Reviewed.']);
+assert(notificationTitle === 'Orchrd · Reviewer', 'completion notification follows title changes');
+notifications = 0;
 extension._pressed = true;
 extension.disable();
 assert(first.cancelled, 'disabling during push-to-talk cancels recording');

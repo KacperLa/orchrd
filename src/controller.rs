@@ -12,7 +12,11 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
-use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{
     sync::{broadcast, mpsc, oneshot, watch, Mutex, Notify},
     task::JoinSet,
@@ -21,22 +25,22 @@ use tokio::{
 use uuid::Uuid;
 
 struct Recording {
+    permissions: HashMap<String, String>,
     scope: Scope,
     token: String,
-    path: PathBuf,
 }
 struct Turn {
+    permissions: HashMap<String, String>,
     scope: Scope,
     token: String,
     text: Option<String>,
-    path: Option<PathBuf>,
     completed: Option<oneshot::Sender<Result<()>>>,
 }
 struct Runtime {
     coordinator: Coordinator,
-    messages: mpsc::UnboundedReceiver<Message>,
-    turns: mpsc::UnboundedReceiver<Turn>,
-    speech: mpsc::UnboundedReceiver<Speech>,
+    messages: mpsc::Receiver<Message>,
+    turns: mpsc::Receiver<Turn>,
+    speech: mpsc::Receiver<Speech>,
 }
 pub struct Controller {
     pub config: Arc<Config>,
@@ -46,8 +50,8 @@ pub struct Controller {
     router: Router,
     tts: TtsClient,
     stt: SttClient,
-    messages: mpsc::UnboundedSender<Message>,
-    turns: mpsc::UnboundedSender<Turn>,
+    messages: mpsc::Sender<Message>,
+    turns: mpsc::Sender<Turn>,
     snapshots: watch::Receiver<Snapshot>,
     events: broadcast::Sender<Event>,
     summaries: Arc<Notify>,
@@ -56,6 +60,8 @@ pub struct Controller {
 }
 impl Controller {
     pub async fn new(config: Config) -> Result<Arc<Self>> {
+        config.validate()?;
+        config.validate_runtime()?;
         tokio::fs::create_dir_all(Config::runtime_dir()).await?;
         let db = Arc::new(Database::open(&Config::data_dir()?.join("orchrd.sqlite3"))?);
         let mode = db
@@ -71,9 +77,9 @@ impl Controller {
         let snapshot = Snapshot::initial(mode);
         let (snapshots_tx, snapshots) = watch::channel(snapshot.clone());
         let (events, _) = broadcast::channel(128);
-        let (messages, messages_rx) = mpsc::unbounded_channel();
-        let (turns, turns_rx) = mpsc::unbounded_channel();
-        let (speech, speech_rx) = mpsc::unbounded_channel();
+        let (messages, messages_rx) = mpsc::channel(256);
+        let (turns, turns_rx) = mpsc::channel(16);
+        let (speech, speech_rx) = mpsc::channel(32);
         let summaries = Arc::new(Notify::new());
         let coordinator = Coordinator::new(
             snapshot,
@@ -111,18 +117,24 @@ impl Controller {
     pub async fn snapshot(&self) -> Snapshot {
         self.snapshots.borrow().clone()
     }
-    fn send(&self, message: Message) -> Result<()> {
-        self.messages.send(message).context("coordinator stopped")
+    async fn send(&self, message: Message) -> Result<()> {
+        self.messages
+            .send(message)
+            .await
+            .context("coordinator stopped")
     }
     fn trace(&self, scope: &Scope, activity: Activity) -> Result<()> {
-        self.send(Message::Activity {
+        match self.messages.try_send(Message::Activity {
             scope: scope.clone(),
             activity,
-        })
+        }) {
+            Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => bail!("coordinator stopped"),
+        }
     }
     async fn ask<T>(&self, make: impl FnOnce(oneshot::Sender<Result<T>>) -> Message) -> Result<T> {
         let (tx, rx) = oneshot::channel();
-        self.send(make(tx))?;
+        self.send(make(tx)).await?;
         rx.await.context("coordinator stopped before replying")?
     }
     async fn context(&self, scope: &Scope) -> Result<Snapshot> {
@@ -184,11 +196,16 @@ impl Controller {
         }
         let scope = self.snapshots.borrow().scope.clone();
         let token = Uuid::new_v4().to_string();
+        let permissions = self.agents.permission_ids().await;
         self.voice(&scope, &token, "listening").await?;
         let _ = self.tts.cancel().await;
         match self.stt.start(&token).await {
-            Ok(path) => {
-                *recording = Some(Recording { scope, token, path });
+            Ok(()) => {
+                *recording = Some(Recording {
+                    scope,
+                    token,
+                    permissions,
+                });
                 Ok(())
             }
             Err(error) => {
@@ -202,7 +219,7 @@ impl Controller {
                         json!({"error":error.to_string()}),
                     ),
                 )?;
-                self.send(Message::VoiceDone { token })?;
+                self.send(Message::VoiceDone { token }).await?;
                 Err(error)
             }
         }
@@ -221,18 +238,29 @@ impl Controller {
             let _ = self.stt.cancel().await;
             self.send(Message::VoiceDone {
                 token: recording.token,
-            })?;
+            })
+            .await?;
             return Err(error);
         }
-        self.turns
-            .send(Turn {
+        if self
+            .turns
+            .try_send(Turn {
+                permissions: recording.permissions,
                 scope: recording.scope,
-                token: recording.token,
+                token: recording.token.clone(),
                 text: None,
-                path: Some(recording.path),
                 completed: None,
             })
-            .context("conversation worker stopped")
+            .is_err()
+        {
+            let _ = self.stt.cancel().await;
+            self.send(Message::VoiceDone {
+                token: recording.token,
+            })
+            .await?;
+            bail!("conversation queue is full or closed")
+        }
+        Ok(())
     }
     pub async fn cancel_listening(&self) -> Result<()> {
         let mut recording = self.recording.lock().await;
@@ -244,12 +272,17 @@ impl Controller {
             )?;
             self.send(Message::VoiceDone {
                 token: recording.token,
-            })?;
+            })
+            .await?;
             result?;
         }
         Ok(())
     }
     pub async fn dispatch_transcript(&self, text: &str) -> Result<()> {
+        if text.trim().is_empty() || text.len() > 64_000 {
+            bail!("dispatch text must contain between 1 and 64000 bytes")
+        }
+        let permissions = self.agents.permission_ids().await;
         // Pin the controller lifetime at submission, before this turn waits behind another.
         let scope = self.snapshots.borrow().scope.clone();
         let (completed, rx) = oneshot::channel();
@@ -265,14 +298,14 @@ impl Controller {
             ),
         )?;
         self.turns
-            .send(Turn {
+            .try_send(Turn {
+                permissions,
                 scope,
                 token,
                 text: Some(text.into()),
-                path: None,
                 completed: Some(completed),
             })
-            .context("conversation worker stopped")?;
+            .context("conversation queue is full or closed")?;
         rx.await
             .context("conversation worker stopped before replying")?
     }
@@ -280,6 +313,7 @@ impl Controller {
         let target: Value = serde_json::from_str(id).context("invalid approval reference")?;
         let scope: Scope = serde_json::from_value(target["scope"].clone())?;
         let agent = string_arg(&target, "agent_name")?;
+        let question_id = string_arg(&target, "question_id")?;
         let current = self.context(&scope).await?;
         if !current.agents.iter().any(|a| {
             a.name == agent && Some(a.instance_id.as_str()) == target["instance_id"].as_str()
@@ -295,7 +329,7 @@ impl Controller {
                 } else {
                     OperationKind::Deny
                 },
-                json!({"approve":approve}),
+                json!({"approve":approve,"question_id":question_id}),
                 None,
             )
             .await?;
@@ -336,7 +370,7 @@ impl Controller {
         loop {
             let scope = self.snapshots.borrow().scope.clone();
             let agents = self.agents.snapshot().await;
-            self.send(Message::Polled { scope, agents })?;
+            self.send(Message::Polled { scope, agents }).await?;
             sleep(Duration::from_millis(200)).await;
         }
     }
@@ -427,10 +461,7 @@ impl Controller {
                 .await?;
         }
     }
-    async fn conversation_worker(
-        self: Arc<Self>,
-        mut turns: mpsc::UnboundedReceiver<Turn>,
-    ) -> Result<()> {
+    async fn conversation_worker(self: Arc<Self>, mut turns: mpsc::Receiver<Turn>) -> Result<()> {
         while let Some(turn) = turns.recv().await {
             let result = self.process_turn(&turn).await;
             self.trace(
@@ -449,12 +480,14 @@ impl Controller {
             )?;
             self.send(Message::VoiceDone {
                 token: turn.token.clone(),
-            })?;
+            })
+            .await?;
             if let Err(error) = &result {
                 self.send(Message::Error {
                     scope: turn.scope.clone(),
                     error: redact(&format!("{error:#}")),
-                })?;
+                })
+                .await?;
             }
             if let Some(completed) = turn.completed {
                 let _ = completed.send(result);
@@ -463,10 +496,9 @@ impl Controller {
         bail!("conversation queue closed")
     }
     async fn process_turn(&self, turn: &Turn) -> Result<()> {
-        let text = match (&turn.text, &turn.path) {
-            (Some(text), _) => text.clone(),
-            (_, Some(path)) => self.stt.stop_and_wait(path).await?,
-            _ => bail!("empty conversation turn"),
+        let text = match &turn.text {
+            Some(text) => text.clone(),
+            None => self.stt.stop_and_wait(&turn.token).await?,
         };
         self.voice(&turn.scope, &turn.token, "routing").await?;
         self.trace(
@@ -606,18 +638,20 @@ impl Controller {
             Operation::ReadAgent => ("read_agent", json!({"agent_id":agent.name})),
             Operation::Cancel => ("cancel_agent", json!({"agent_id":agent.name})),
             Operation::Approve | Operation::Deny => {
-                if !current
+                let Some(question) = self
                     .agents
-                    .iter()
-                    .any(|a| a.name == agent.name && a.status == "blocked")
-                {
+                    .question(&agent.name)
+                    .await
+                    .filter(|q| q.question_kind == "permission")
+                else {
                     return self
                         .reply(&turn.scope, "That agent has no pending permission request.")
                         .await;
-                }
+                };
+                let question_id = permission_for_turn(&turn.permissions, &agent.name, &question)?;
                 (
                     "respond_to_agent",
-                    json!({"agent_id":agent.name,"approve":decision.operation==Operation::Approve}),
+                    json!({"agent_id":agent.name,"approve":decision.operation==Operation::Approve,"question_id":question_id}),
                 )
             }
             _ => unreachable!(),
@@ -845,7 +879,7 @@ impl Controller {
                         .command(
                             name,
                             "permission",
-                            json!({"approve":matches!(kind,OperationKind::Approve)}),
+                            json!({"approve":matches!(kind,OperationKind::Approve),"question_id":string_arg(&request,"question_id")?}),
                         )
                         .await
                 }
@@ -861,14 +895,15 @@ impl Controller {
         self.send(Message::Delivered {
             id,
             result: delivery,
-        })?;
+        })
+        .await?;
         rx.await.context("operation confirmation was interrupted")
     }
     async fn speech_worker(
         tts: TtsClient,
         mut policy: watch::Receiver<Snapshot>,
-        messages: mpsc::UnboundedSender<Message>,
-        mut queue: mpsc::UnboundedReceiver<Speech>,
+        messages: mpsc::Sender<Message>,
+        mut queue: mpsc::Receiver<Speech>,
     ) -> Result<()> {
         while let Some(speech) = queue.recv().await {
             while speech.current(&policy.borrow()) && policy.borrow().voice_state != "idle" {
@@ -886,6 +921,7 @@ impl Controller {
                             json!({"reason":"speech policy changed"}),
                         ),
                     })
+                    .await
                     .context("coordinator stopped")?;
                 continue;
             }
@@ -900,6 +936,7 @@ impl Controller {
                         json!({}),
                     ),
                 })
+                .await
                 .context("coordinator stopped")?;
             let result = {
                 let playback = tts.speak(&speech.id, &speech.text);
@@ -921,10 +958,25 @@ impl Controller {
             }
             messages
                 .send(Message::Spoken { speech, result })
+                .await
                 .context("coordinator stopped")?;
         }
         bail!("speech queue closed")
     }
+}
+
+fn permission_for_turn<'a>(
+    permissions: &'a HashMap<String, String>,
+    agent: &str,
+    question: &crate::question::Question,
+) -> Result<&'a str> {
+    let id = permissions
+        .get(agent)
+        .context("No permission was pending when this utterance began")?;
+    if question.question_kind != "permission" || *id != question.question_id {
+        bail!("That permission request has changed; please answer the latest request")
+    }
+    Ok(id)
 }
 
 fn pending_read_reason(
@@ -947,6 +999,18 @@ fn pending_read_reason(
 mod readback_tests {
     use super::*;
 
+    #[test]
+    fn queued_or_routing_turn_cannot_approve_a_new_permission() {
+        let permissions = HashMap::from([("agent".into(), "old".into())]);
+        let mut question: crate::question::Question = serde_json::from_value(json!({"question_id":"old","question_kind":"permission","title":"Approval","body":"Write?","options":[],"multiple":false,"allow_custom":false})).unwrap();
+        assert_eq!(
+            permission_for_turn(&permissions, "agent", &question).unwrap(),
+            "old"
+        );
+        question.question_id = "new".into();
+        assert!(permission_for_turn(&permissions, "agent", &question).is_err());
+        assert!(permission_for_turn(&HashMap::new(), "agent", &question).is_err());
+    }
     #[test]
     fn a_new_send_cannot_read_a_previous_result_in_the_same_turn() {
         let agent = crate::agent::AgentInfo {
@@ -1011,8 +1075,8 @@ mod tests {
         let listener = UnixListener::bind(&socket).unwrap();
         let snapshot = Snapshot::initial(AnnouncementMode::Auto);
         let (_policy, rx) = watch::channel(snapshot.clone());
-        let (messages, mut results) = mpsc::unbounded_channel();
-        let (speech, queue) = mpsc::unbounded_channel();
+        let (messages, mut results) = mpsc::channel(256);
+        let (speech, queue) = mpsc::channel(256);
         let worker = tokio::spawn(Controller::speech_worker(
             TtsClient::new(socket),
             rx,
@@ -1028,9 +1092,9 @@ mod tests {
         };
         let mut stale = make("stale");
         stale.scope.epoch = "old lifetime".into();
-        speech.send(stale).unwrap();
-        speech.send(make("first")).unwrap();
-        speech.send(make("second")).unwrap();
+        speech.try_send(stale).unwrap();
+        speech.try_send(make("first")).unwrap();
+        speech.try_send(make("second")).unwrap();
         for id in ["first", "second"] {
             let (stream, _) = timeout(Duration::from_secs(2), listener.accept())
                 .await

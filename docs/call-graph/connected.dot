@@ -1,0 +1,219 @@
+digraph orchrd_call_graph {
+  graph [rankdir=LR, fontname="Helvetica", fontsize=16, label="orchrd: static calls between project functions", labelloc=t, overlap=false, outputorder=edgesfirst];
+  node [shape=box, style="rounded,filled", fillcolor="#eef4ff", color="#8aa4c8", fontname="Helvetica", fontsize=10];
+  edge [color="#66758c", arrowsize=0.7];
+  subgraph cluster_0 {
+    label="src/activity.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n0 [label="new (L20)", tooltip="new", fillcolor="#eef4ff"];
+    n1 [label="linked (L41)", tooltip="linked", fillcolor="#eef4ff"];
+    n2 [label="update (L48)", tooltip="activity::update", fillcolor="#eef4ff"];
+    n3 [label="bound_detail (L87)", tooltip="activity::bound_detail", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_1 {
+    label="src/agent_bridge.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n4 [label="serve (L36)", tooltip="serve", fillcolor="#eef4ff"];
+    n5 [label="question (L282)", tooltip="question", fillcolor="#eef4ff"];
+    n6 [label="permission_ids (L285)", tooltip="permission_ids", fillcolor="#eef4ff"];
+    n7 [label="command (L309)", tooltip="command", fillcolor="#eef4ff"];
+    n8 [label="command_with_timeout (L313)", tooltip="command_with_timeout", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_2 {
+    label="src/bin/orchrdd.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n9 [label="state_changed (L55)", tooltip="state_changed", fillcolor="#e4f6ec"];
+    n10 [label="transcript_ready (L57)", tooltip="transcript_ready", fillcolor="#e4f6ec"];
+    n11 [label="completion_finished (L59)", tooltip="completion_finished", fillcolor="#e4f6ec"];
+    n12 [label="approval_required (L65)", tooltip="approval_required", fillcolor="#e4f6ec"];
+    n13 [label="error (L71)", tooltip="error", fillcolor="#e4f6ec"];
+    n14 [label="main (L78)", tooltip="main", fillcolor="#e4f6ec"];
+    n15 [label="supervise (L104)", tooltip="supervise", fillcolor="#e4f6ec"];
+    n16 [label="signal_loop (L125)", tooltip="signal_loop", fillcolor="#e4f6ec"];
+    n17 [label="arg_value (L164)", tooltip="arg_value", fillcolor="#e4f6ec"];
+  }
+  subgraph cluster_3 {
+    label="src/config.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n18 [label="default (L148)", tooltip="default", fillcolor="#eef4ff"];
+    n19 [label="default_api_key_env (L193)", tooltip="config::default_api_key_env", fillcolor="#eef4ff"];
+    n20 [label="default_intent_timeout_seconds (L196)", tooltip="config::default_intent_timeout_seconds", fillcolor="#eef4ff"];
+    n21 [label="api_key (L231)", tooltip="api_key", fillcolor="#eef4ff"];
+    n22 [label="runtime_dir (L247)", tooltip="runtime_dir", fillcolor="#eef4ff"];
+    n23 [label="tts_socket (L259)", tooltip="tts_socket", fillcolor="#eef4ff"];
+    n24 [label="credential (L293)", tooltip="config::credential", fillcolor="#eef4ff"];
+    n25 [label="libc_getuid (L318)", tooltip="config::libc_getuid", fillcolor="#eef4ff"];
+    n26 [label="getuid (L320)", tooltip="getuid", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_4 {
+    label="src/controller.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n27 [label="new (L62)", tooltip="new", fillcolor="#eef4ff"];
+    n28 [label="trace (L126)", tooltip="trace", fillcolor="#eef4ff"];
+    n29 [label="ask (L135)", tooltip="ask", fillcolor="#eef4ff"];
+    n30 [label="context (L140)", tooltip="context", fillcolor="#eef4ff"];
+    n31 [label="voice (L147)", tooltip="voice", fillcolor="#eef4ff"];
+    n32 [label="record (L160)", tooltip="record", fillcolor="#eef4ff"];
+    n33 [label="reply (L178)", tooltip="reply", fillcolor="#eef4ff"];
+    n34 [label="set_announcement_mode (L186)", tooltip="set_announcement_mode", fillcolor="#eef4ff"];
+    n35 [label="repeat_last (L189)", tooltip="repeat_last", fillcolor="#eef4ff"];
+    n36 [label="start_listening (L192)", tooltip="start_listening", fillcolor="#eef4ff"];
+    n37 [label="stop_listening (L227)", tooltip="stop_listening", fillcolor="#eef4ff"];
+    n38 [label="cancel_listening (L265)", tooltip="cancel_listening", fillcolor="#eef4ff"];
+    n39 [label="dispatch_transcript (L281)", tooltip="dispatch_transcript", fillcolor="#eef4ff"];
+    n40 [label="run (L341)", tooltip="run", fillcolor="#eef4ff"];
+    n41 [label="process_turn (L498)", tooltip="process_turn", fillcolor="#eef4ff"];
+    n42 [label="execute_tool (L742)", tooltip="execute_tool", fillcolor="#eef4ff"];
+    n43 [label="operation (L840)", tooltip="operation", fillcolor="#eef4ff"];
+    n44 [label="speech_worker (L902)", tooltip="speech_worker", fillcolor="#eef4ff"];
+    n45 [label="pending_read_reason (L982)", tooltip="controller::pending_read_reason", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_5 {
+    label="src/coordinator.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n46 [label="initial (L41)", tooltip="initial", fillcolor="#eef4ff"];
+    n47 [label="Snapshot (L61)", tooltip="Snapshot", fillcolor="#eef4ff"];
+    n48 [label="Transcript (L62)", tooltip="Transcript", fillcolor="#eef4ff"];
+    n49 [label="Error (L65)", tooltip="Error", fillcolor="#eef4ff"];
+    n50 [label="current (L85)", tooltip="current", fillcolor="#eef4ff"];
+    n51 [label="new (L198)", tooltip="new", fillcolor="#eef4ff"];
+    n52 [label="check_scope (L230)", tooltip="check_scope", fillcolor="#eef4ff"];
+    n53 [label="publish (L236)", tooltip="publish", fillcolor="#eef4ff"];
+    n54 [label="trace (L256)", tooltip="trace", fillcolor="#eef4ff"];
+    n55 [label="queue_speech (L259)", tooltip="queue_speech", fillcolor="#eef4ff"];
+    n56 [label="handle (L310)", tooltip="handle", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_6 {
+    label="src/db.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n57 [label="append (L139)", tooltip="append", fillcolor="#eef4ff"];
+    n58 [label="insert_message (L263)", tooltip="db::insert_message", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_7 {
+    label="src/intent.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n59 [label="draft_agent_request (L46)", tooltip="draft_agent_request", fillcolor="#eef4ff"];
+    n60 [label="routing_agents (L104)", tooltip="intent::routing_agents", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_8 {
+    label="src/question.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n61 [label="mode_payload (L80)", tooltip="question::mode_payload", fillcolor="#eef4ff"];
+    n62 [label="payload (L95)", tooltip="question::payload", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_9 {
+    label="src/request_writer.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n63 [label="parse (L24)", tooltip="request_writer::parse", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_10 {
+    label="src/routing.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n64 [label="classify_with_questions (L50)", tooltip="classify_with_questions", fillcolor="#eef4ff"];
+    n65 [label="answer_question (L63)", tooltip="answer_question", fillcolor="#eef4ff"];
+    n66 [label="names (L104)", tooltip="routing::names", fillcolor="#eef4ff"];
+    n67 [label="payload (L118)", tooltip="routing::payload", fillcolor="#eef4ff"];
+    n68 [label="resolve (L149)", tooltip="routing::resolve", fillcolor="#eef4ff"];
+    n69 [label="acknowledgement (L211)", tooltip="routing::acknowledgement", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_11 {
+    label="src/stt.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n70 [label="start (L41)", tooltip="start", fillcolor="#eef4ff"];
+    n71 [label="stop_capture (L92)", tooltip="stop_capture", fillcolor="#eef4ff"];
+    n72 [label="stop_and_wait (L101)", tooltip="stop_and_wait", fillcolor="#eef4ff"];
+    n73 [label="cancel (L117)", tooltip="cancel", fillcolor="#eef4ff"];
+    n74 [label="transcribe (L146)", tooltip="stt::transcribe", fillcolor="#eef4ff"];
+  }
+  subgraph cluster_12 {
+    label="src/tts.rs";
+    color="#d7dce5"; style=rounded; fontname="Helvetica"; fontsize=11;
+    n75 [label="new (L21)", tooltip="new", fillcolor="#eef4ff"];
+    n76 [label="from_config (L28)", tooltip="from_config", fillcolor="#eef4ff"];
+    n77 [label="speak (L35)", tooltip="speak", fillcolor="#eef4ff"];
+    n78 [label="cancel (L49)", tooltip="cancel", fillcolor="#eef4ff"];
+    n79 [label="stream_speech (L56)", tooltip="stream_speech", fillcolor="#eef4ff"];
+    n80 [label="play_stream (L68)", tooltip="play_stream", fillcolor="#eef4ff"];
+    n81 [label="request (L120)", tooltip="request", fillcolor="#eef4ff"];
+    n82 [label="normalize_for_speech (L151)", tooltip="tts::normalize_for_speech", fillcolor="#eef4ff"];
+    n83 [label="plain_speech (L163)", tooltip="tts::plain_speech", fillcolor="#eef4ff"];
+    n84 [label="concise_speech (L186)", tooltip="tts::concise_speech", fillcolor="#eef4ff"];
+  }
+  n2 -> n3;
+  n65 -> n62;
+  n21 -> n24;
+  n57 -> n58;
+  n78 -> n81;
+  n38 -> n73;
+  n64 -> n67;
+  n7 -> n8;
+  n25 -> n26;
+  n30 -> n29;
+  n18 -> n19;
+  n18 -> n20;
+  n39 -> n6;
+  n59 -> n63;
+  n42 -> n45;
+  n42 -> n60;
+  n42 -> n43;
+  n76 -> n75;
+  n76 -> n23;
+  n56 -> n49;
+  n56 -> n48;
+  n56 -> n52;
+  n56 -> n50;
+  n56 -> n1;
+  n56 -> n0;
+  n56 -> n55;
+  n56 -> n54;
+  n56 -> n84;
+  n56 -> n83;
+  n14 -> n17;
+  n14 -> n16;
+  n14 -> n15;
+  n27 -> n46;
+  n27 -> n51;
+  n43 -> n7;
+  n41 -> n42;
+  n41 -> n5;
+  n41 -> n35;
+  n41 -> n33;
+  n41 -> n69;
+  n53 -> n47;
+  n61 -> n62;
+  n55 -> n49;
+  n55 -> n1;
+  n55 -> n0;
+  n55 -> n54;
+  n32 -> n29;
+  n35 -> n29;
+  n33 -> n29;
+  n67 -> n66;
+  n68 -> n66;
+  n40 -> n44;
+  n4 -> n22;
+  n34 -> n29;
+  n16 -> n47;
+  n16 -> n12;
+  n16 -> n11;
+  n16 -> n13;
+  n16 -> n9;
+  n16 -> n10;
+  n77 -> n81;
+  n44 -> n78;
+  n44 -> n77;
+  n36 -> n78;
+  n36 -> n6;
+  n36 -> n70;
+  n72 -> n74;
+  n37 -> n73;
+  n37 -> n71;
+  n37 -> n31;
+  n79 -> n80;
+  n54 -> n2;
+  n84 -> n83;
+  n82 -> n83;
+  n23 -> n22;
+  n31 -> n0;
+  n31 -> n28;
+}

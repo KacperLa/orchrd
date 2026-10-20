@@ -25,6 +25,7 @@ impl IntentClient {
             http: Client::builder()
                 .connect_timeout(Duration::from_secs(5))
                 .timeout(Duration::from_secs(cfg.intent.timeout_seconds))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .context("build intent HTTP client")?,
             base_url: cfg.intent.base_url.trim_end_matches('/').to_owned(),
@@ -32,11 +33,19 @@ impl IntentClient {
             api_key: cfg.api_key()?,
         })
     }
+    fn post(&self) -> reqwest::RequestBuilder {
+        let request = self
+            .http
+            .post(format!("{}/chat/completions", self.base_url));
+        if self.api_key.is_empty() {
+            request
+        } else {
+            request.bearer_auth(&self.api_key)
+        }
+    }
     pub async fn draft_agent_request(&self, utterance: &str, recipient: &str) -> Result<String> {
         let response = self
-            .http
-            .post(format!("{}/chat/completions", self.base_url))
-            .bearer_auth(&self.api_key)
+            .post()
             .json(&crate::request_writer::payload(
                 &self.model,
                 utterance,
@@ -44,6 +53,7 @@ impl IntentClient {
             ))
             .send()
             .await
+            .map_err(|e| e.without_url())
             .context("call request writer API")?;
         if !response.status().is_success() {
             bail!("request writer API returned HTTP {}", response.status());
@@ -77,12 +87,12 @@ impl IntentClient {
             .context("blocker response omitted speech")
     }
     async fn complete(&self, system: &str, user: &str) -> Result<String> {
-        let response=self.http.post(format!("{}/chat/completions",self.base_url)).bearer_auth(&self.api_key).json(&json!({"model":self.model,"temperature":0,"messages":[{"role":"system","content":system},{"role":"user","content":user}]})).send().await.context("call intent API")?;
+        let response=self.post().json(&json!({"model":self.model,"temperature":0,"messages":[{"role":"system","content":system},{"role":"user","content":user}]})).send().await.map_err(|e| e.without_url()).context("call intent API")?;
         let status = response.status();
-        let body = response.text().await?;
         if !status.is_success() {
-            bail!("intent API returned {status}: {}", truncate(&body, 500))
+            bail!("intent API returned HTTP {status}")
         }
+        let body = response.text().await.map_err(|e| e.without_url())?;
         let v: Value = serde_json::from_str(&body).context("parse intent API response")?;
         v.pointer("/choices/0/message/content")
             .and_then(Value::as_str)
@@ -125,13 +135,41 @@ pub fn redact(text: &str) -> String {
     }
     out
 }
-fn truncate(s: &str, n: usize) -> String {
-    s.chars().take(n).collect()
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn provider_errors_never_echo_private_bodies_and_redirects_are_rejected() {
+        for status in [
+            "401 Unauthorized",
+            "429 Too Many Requests",
+            "302 Found",
+            "500 Internal Server Error",
+        ] {
+            let (settings, server) = crate::speech_api::tests::server(
+                status,
+                "private transcript and secret credential",
+            )
+            .await;
+            let mut config = Config::default();
+            config.intent.base_url = settings.base_url;
+            config.intent.api_key_env.clear();
+            let client = IntentClient::new(&config).unwrap();
+            let error = client
+                .complete("system", "user")
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(&status[..3]));
+            assert!(!error.contains("private"));
+            assert!(!error.contains("secret"));
+            let request = String::from_utf8(server.await.unwrap())
+                .unwrap()
+                .to_lowercase();
+            assert!(!request.contains("authorization:"));
+        }
+    }
     #[test]
     fn hides_tokens() {
         assert!(!redact("api_key=abcd1234").contains("abcd1234"));

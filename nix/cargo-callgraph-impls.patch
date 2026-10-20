@@ -1,0 +1,27 @@
+diff --git a/src/collector.rs b/src/collector.rs
+--- a/src/collector.rs
++++ b/src/collector.rs
+@@ -50,6 +50,24 @@ fn build_inner(project: &LoadedProject, graph: &mut CallGraph) -> anyhow::Result<()> {
+                     }
+                 }
+             }
++            // Module declarations do not include functions inside `impl` blocks.
++            for impl_def in module.impl_defs(db) {
++                for item in impl_def.items(db) {
++                    if let Some(func) = item.as_function() {
++                        if let Some(nav) = nav_target_for_function(db, func) {
++                            let module_path = module_path_for_function(db, func);
++                            let mut node =
++                                nav_target_to_node(db, analysis, &project.vfs, &nav, true);
++                            node.module_path = module_path;
++                            let id = node.id.clone();
++                            let idx = graph.get_or_insert_node(node);
++                            if visited.insert(id) {
++                                work_queue.push_back((idx, nav));
++                            }
++                        }
++                    }
++                }
++            }
+         }
+     }

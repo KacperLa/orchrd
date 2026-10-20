@@ -29,7 +29,7 @@ class Settings:
 class Worker:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.queue: asyncio.Queue[tuple[str, asyncio.Future]] = asyncio.Queue()
+        self.queue: asyncio.Queue[tuple[str, asyncio.Future]] = asyncio.Queue(maxsize=32)
         self.current_cancel: threading.Event | None = None
         self.task: asyncio.Task | None = None
         self.model = None
@@ -76,7 +76,12 @@ class Worker:
 
     async def enqueue_speech(self, text: str):
         completed = asyncio.get_running_loop().create_future()
-        await self.queue.put((text, completed))
+        if len(text.encode("utf-8")) > 64000:
+            raise ValueError("speech text exceeds 64000 bytes")
+        try:
+            self.queue.put_nowait((text, completed))
+        except asyncio.QueueFull:
+            raise RuntimeError("speech queue is full") from None
         await completed
 
     def cancel_all(self):

@@ -9,19 +9,12 @@ use std::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
-    pub commands: Commands,
     pub intent: Intent,
     pub routing: Routing,
     pub conversation: Conversation,
     pub voice: Voice,
     pub stt: Stt,
     pub tts: Tts,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct Commands {
-    pub voxtype: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -57,7 +50,7 @@ impl std::fmt::Debug for Routing {
 impl Default for Routing {
     fn default() -> Self {
         Self {
-            endpoint: "http://192.168.1.104:8009/v1/systemone".into(),
+            endpoint: "http://127.0.0.1:8009/v1/systemone".into(),
             model: "kev-latest".into(),
             api_key: String::new(),
             timeout_seconds: 30,
@@ -78,8 +71,6 @@ pub struct Conversation {
 #[serde(default, deny_unknown_fields)]
 pub struct Voice {
     pub announcement_mode: AnnouncementMode,
-    pub transcription_timeout_seconds: u64,
-    pub voxtype_state_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -110,18 +101,9 @@ pub enum TtsProvider {
     OpenaiCompatible,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SttProvider {
-    #[default]
-    Voxtype,
-    OpenaiCompatible,
-}
-
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Stt {
-    pub provider: SttProvider,
     pub api: SpeechApi,
 }
 
@@ -150,19 +132,8 @@ impl Default for SpeechApi {
 
 impl SpeechApi {
     fn validate(&self, name: &str, needs_voice: bool) -> Result<()> {
-        let url = reqwest::Url::parse(&self.base_url)
-            .with_context(|| format!("{name}.api.base_url must be an HTTP(S) URL"))?;
-        if !matches!(url.scheme(), "https" | "http")
-            || url.host_str().is_none()
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.query().is_some()
-            || url.fragment().is_some()
-        {
-            bail!(
-                "{name}.api.base_url must be an HTTP(S) URL without credentials, query or fragment"
-            );
-        }
+        validate_url(&self.base_url, &format!("{name}.api.base_url"))?;
+        validate_env_name(&self.api_key_env, &format!("{name}.api.api_key_env"))?;
         if self.model.trim().is_empty() || (needs_voice && self.voice.trim().is_empty()) {
             bail!("{name}.api.model (and for TTS, voice) are required");
         }
@@ -176,7 +147,6 @@ impl SpeechApi {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            commands: Commands::default(),
             intent: Intent {
                 base_url: String::new(),
                 model: String::new(),
@@ -200,19 +170,10 @@ impl Default for Conversation {
         }
     }
 }
-impl Default for Commands {
-    fn default() -> Self {
-        Self {
-            voxtype: "voxtype".into(),
-        }
-    }
-}
 impl Default for Voice {
     fn default() -> Self {
         Self {
             announcement_mode: AnnouncementMode::Muted,
-            transcription_timeout_seconds: 60,
-            voxtype_state_file: None,
         }
     }
 }
@@ -252,33 +213,36 @@ impl Config {
         Ok(cfg)
     }
     pub fn validate(&self) -> Result<()> {
-        if self.intent.base_url.is_empty() || self.intent.model.is_empty() {
-            bail!("intent.base_url and intent.model are required")
+        validate_url(&self.intent.base_url, "intent.base_url")?;
+        validate_url(&self.routing.endpoint, "routing.endpoint")?;
+        validate_env_name(&self.intent.api_key_env, "intent.api_key_env")?;
+        if self.intent.model.trim().is_empty() || self.intent.timeout_seconds == 0 {
+            bail!("intent.model and a positive intent.timeout_seconds are required")
         }
-        if self.routing.endpoint.is_empty()
-            || self.routing.model.is_empty()
-            || self.routing.timeout_seconds == 0
-        {
-            bail!("routing endpoint, model, and a positive timeout are required")
+        if self.routing.model.trim().is_empty() || self.routing.timeout_seconds == 0 {
+            bail!("routing.model and a positive routing.timeout_seconds are required")
         }
-        if self.voice.transcription_timeout_seconds == 0 {
-            bail!("voice.transcription_timeout_seconds must be greater than zero")
-        }
-        if self.stt.provider == SttProvider::OpenaiCompatible {
-            self.stt.api.validate("stt", false)?;
-        }
+        self.stt.api.validate("stt", false)?;
         if self.tts.provider == TtsProvider::OpenaiCompatible {
             self.tts.api.validate("tts", true)?;
         }
         Ok(())
     }
     pub fn api_key(&self) -> Result<String> {
-        env::var(&self.intent.api_key_env).with_context(|| {
-            format!(
-                "environment variable {} is not set",
-                self.intent.api_key_env
-            )
-        })
+        credential(&self.intent.api_key_env)
+    }
+    /// Check credentials and local assets before opening sockets or the microphone.
+    pub fn validate_runtime(&self) -> Result<()> {
+        self.validate()?;
+        credential(&self.intent.api_key_env)?;
+        credential(&self.stt.api.api_key_env)?;
+        if self.tts.provider == TtsProvider::OpenaiCompatible {
+            credential(&self.tts.api.api_key_env)?;
+        } else {
+            readable_asset(&self.tts.model_config, "tts.model_config")?;
+            readable_asset(&self.tts.voice, "tts.voice")?;
+        }
+        Ok(())
     }
     pub fn runtime_dir() -> PathBuf {
         env::var_os("XDG_RUNTIME_DIR")
@@ -292,20 +256,61 @@ impl Config {
             .data_dir()
             .to_path_buf())
     }
-    pub fn voxtype_state_file(&self) -> PathBuf {
-        self.voice.voxtype_state_file.clone().unwrap_or_else(|| {
-            Config::runtime_dir()
-                .parent()
-                .unwrap_or(Path::new("/tmp"))
-                .join("voxtype/state")
-        })
-    }
     pub fn tts_socket(&self) -> PathBuf {
         self.tts
             .socket
             .clone()
             .unwrap_or_else(|| Config::runtime_dir().join("tts.sock"))
     }
+}
+
+fn validate_url(value: &str, name: &str) -> Result<()> {
+    // Never include the supplied URL in errors: it may contain credentials.
+    let url =
+        reqwest::Url::parse(value).map_err(|_| anyhow::anyhow!("{name} must be an HTTP(S) URL"))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        bail!("{name} must be an HTTP(S) URL without credentials, query or fragment")
+    }
+    Ok(())
+}
+fn validate_env_name(value: &str, name: &str) -> Result<()> {
+    if !value.is_empty()
+        && (!value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            || value.as_bytes()[0].is_ascii_digit())
+    {
+        bail!("{name} must be an environment variable name or empty")
+    }
+    Ok(())
+}
+fn credential(name: &str) -> Result<String> {
+    if name.is_empty() {
+        return Ok(String::new());
+    }
+    let value =
+        env::var(name).with_context(|| format!("environment variable {name} is not set"))?;
+    if value.trim().is_empty()
+        || reqwest::header::HeaderValue::from_str(&format!("Bearer {value}")).is_err()
+    {
+        bail!("environment variable {name} must contain a nonempty valid API credential")
+    }
+    Ok(value)
+}
+fn readable_asset(path: &Path, name: &str) -> Result<()> {
+    use std::io::Read;
+    let mut file = fs::File::open(path)
+        .with_context(|| format!("{name} must point to a readable local file"))?;
+    if !file.metadata()?.is_file() || file.read(&mut [0u8; 1])? == 0 {
+        bail!("{name} must point to a nonempty local file")
+    }
+    Ok(())
 }
 
 // Avoid adding a libc crate only to construct a last-resort temporary path.
@@ -324,11 +329,122 @@ unsafe fn libc_getuid() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn configured() -> Config {
+        let mut c: Config = toml::from_str(include_str!("../config.example.toml")).unwrap();
+        c.intent.api_key_env.clear();
+        c
+    }
+    #[test]
+    fn intent_and_routing_reject_invalid_urls_timeouts_and_models() {
+        for url in [
+            "not a URL",
+            "file:///tmp/test",
+            "https://user:private@example.com/v1",
+            "https://example.com/?key=private",
+            "https://example.com/#fragment",
+        ] {
+            let mut c = configured();
+            c.intent.base_url = url.into();
+            let error = c.validate().unwrap_err().to_string();
+            assert!(error.contains("intent.base_url"));
+            assert!(!error.contains("private"));
+            let mut c = configured();
+            c.routing.endpoint = url.into();
+            assert!(c
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("routing.endpoint"));
+        }
+        let mut c = configured();
+        c.intent.timeout_seconds = 0;
+        assert!(c.validate().is_err());
+        let mut c = configured();
+        c.intent.model = "  ".into();
+        assert!(c.validate().is_err());
+        let mut c = configured();
+        c.routing.timeout_seconds = 0;
+        assert!(c.validate().is_err());
+        let mut c = configured();
+        c.routing.model = "  ".into();
+        assert!(c.validate().is_err());
+        let mut c = configured();
+        c.intent.api_key_env = "bad name".into();
+        assert!(c.validate().is_err());
+        assert_eq!(
+            Routing::default().endpoint,
+            "http://127.0.0.1:8009/v1/systemone"
+        );
+    }
+    #[test]
+    fn runtime_checks_credentials_and_nonempty_local_assets() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut c = configured();
+        c.tts.model_config = dir.path().join("model.yaml");
+        c.tts.voice = dir.path().join("voice.safetensors");
+        assert!(c
+            .validate_runtime()
+            .unwrap_err()
+            .to_string()
+            .contains("tts.model_config"));
+        fs::write(&c.tts.model_config, "model: local").unwrap();
+        fs::write(&c.tts.voice, "").unwrap();
+        assert!(c
+            .validate_runtime()
+            .unwrap_err()
+            .to_string()
+            .contains("tts.voice"));
+        fs::write(&c.tts.voice, "voice").unwrap();
+        c.validate_runtime().unwrap();
+        c.intent.api_key_env = format!("ORCHRD_TEST_MISSING_{}", uuid::Uuid::new_v4().simple());
+        assert!(c
+            .validate_runtime()
+            .unwrap_err()
+            .to_string()
+            .contains(&c.intent.api_key_env));
+        c.intent.api_key_env.clear();
+        c.stt.api.api_key_env = format!("ORCHRD_TEST_MISSING_{}", uuid::Uuid::new_v4().simple());
+        assert!(c.validate_runtime().is_err());
+        c.stt.api.api_key_env.clear();
+        c.tts.provider = TtsProvider::OpenaiCompatible;
+        c.tts.api = SpeechApi {
+            base_url: "http://localhost/v1".into(),
+            model: "tts".into(),
+            voice: "test".into(),
+            ..SpeechApi::default()
+        };
+        c.tts.voice = dir.path().join("absent");
+        c.validate_runtime().unwrap();
+        c.tts.api.api_key_env = format!("ORCHRD_TEST_MISSING_{}", uuid::Uuid::new_v4().simple());
+        assert!(c.validate_runtime().is_err());
+    }
+    #[test]
+    fn empty_and_invalid_credentials_fail_without_echoing_values() {
+        let name = format!("ORCHRD_TEST_CREDENTIAL_{}", uuid::Uuid::new_v4().simple());
+        for value in [" ", "secret\ninvalid"] {
+            env::set_var(&name, value);
+            let error = credential(&name).unwrap_err().to_string();
+            assert!(error.contains(&name));
+            if !value.trim().is_empty() {
+                assert!(!error.contains(value));
+                assert!(!error.contains("secret"));
+            }
+        }
+        env::set_var(&name, "valid-key");
+        assert_eq!(credential(&name).unwrap(), "valid-key");
+        env::remove_var(&name);
+        assert_eq!(credential("").unwrap(), "");
+    }
+    #[test]
+    fn example_configuration_is_valid() {
+        let config: Config = toml::from_str(include_str!("../config.example.toml")).unwrap();
+        config.validate().unwrap();
+    }
     #[test]
     fn defaults_are_stable() {
         let c = Config::default();
         assert_eq!(c.voice.announcement_mode, AnnouncementMode::Muted);
-        assert_eq!(c.stt.provider, SttProvider::Voxtype);
+        assert!(c.stt.api.base_url.is_empty());
         assert_eq!(c.tts.provider, TtsProvider::Pocket);
     }
     #[test]
@@ -353,13 +469,11 @@ mod tests {
         assert!(Routing::default().api_key.is_empty());
     }
     #[test]
-    fn speech_provider_config_is_explicit_and_validated() {
-        assert!(toml::from_str::<Stt>("provider = 'mystery'").is_err());
+    fn stt_api_is_required_and_validated() {
+        assert!(toml::from_str::<Stt>("provider = 'voxtype'").is_err());
         let mut c = Config::default();
         c.intent.base_url = "https://example.com/v1".into();
         c.intent.model = "router".into();
-        assert!(c.validate().is_ok());
-        c.stt.provider = SttProvider::OpenaiCompatible;
         assert!(c.validate().is_err());
         c.stt.api.base_url = "http://localhost:8000/v1".into();
         c.stt.api.model = "transcriber".into();
@@ -376,10 +490,10 @@ mod tests {
         assert!(c.validate().is_err());
     }
     #[test]
-    fn removed_options_are_rejected_and_transcription_timeout_is_explicit() {
+    fn removed_voice_options_are_rejected() {
         assert!(toml::from_str::<Voice>("max_recording_seconds = 10").is_err());
-        let voice: Voice = toml::from_str("transcription_timeout_seconds = 10").unwrap();
-        assert_eq!(voice.transcription_timeout_seconds, 10);
+        assert!(toml::from_str::<Voice>("transcription_timeout_seconds = 10").is_err());
+        assert!(toml::from_str::<Voice>("voxtype_state_file = '/tmp/state'").is_err());
     }
     #[test]
     fn queued_mode_is_read_as_muted_for_compatibility() {

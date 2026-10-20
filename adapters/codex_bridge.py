@@ -27,7 +27,7 @@ class Rpc:
         self.reader, self.writer = reader, writer
         self.sequence = 0
         self.pending = {}
-        self.events = asyncio.Queue()
+        self.events = asyncio.Queue(maxsize=256)
         self.lock = asyncio.Lock()
 
     async def send(self, value):
@@ -164,8 +164,8 @@ class Session:
 
     @property
     def name(self):
-        title = self.thread.get("name") or Path(self.thread.get("cwd", "")).name or "session"
-        return f"Codex {title[:70]} {self.id[-6:]}"
+        title = (self.thread.get("name") or "").strip()
+        return title or Path(self.thread.get("cwd", "")).name or "Codex session"
 
     async def emit(self, message):
         async with self.write_lock:
@@ -230,6 +230,8 @@ class Session:
                 raise ProtocolError("Codex has no supported pending question")
             pending = self.pending[0]
             if action == "permission":
+                if pending.resolved.is_set() or value.get("question_id") != pending.question()["question_id"]:
+                    raise ProtocolError("That question is no longer pending")
                 if pending.method not in APPROVALS or not isinstance(value.get("approve"), bool):
                     raise ProtocolError("This request is not a yes/no permission prompt")
                 response = {"decision": "accept" if value["approve"] else "decline"}
@@ -352,7 +354,7 @@ class Adapter:
             try:
                 # Rejoin first: listing a thread does not guarantee it can be resumed.
                 joined = await self.rpc.call("thread/resume", {"threadId": tid, "excludeTurns": True})
-                session = Session(self, joined["thread"])
+                session = Session(self, {**thread, **joined["thread"]})
                 await session.connect()
                 self.sessions[tid] = session
                 session.ready.set()

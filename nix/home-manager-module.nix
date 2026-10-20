@@ -115,7 +115,6 @@ in
         ConditionPathExists = cfg.configFile;
         After = [
           "graphical-session.target"
-          "voxtype.service"
         ]
         ++ lib.optional cfg.enablePocketTts "orchrd-tts.service";
         Wants = lib.optional cfg.enablePocketTts "orchrd-tts.service";

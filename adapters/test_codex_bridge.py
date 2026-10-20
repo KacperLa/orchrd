@@ -64,6 +64,23 @@ class Sessions(unittest.IsolatedAsyncioTestCase):
         self.session = Session(self.adapter, {"id": "thread-one", "name": "Builder", "cwd": "/tmp", "status": {"type": "idle"}})
         self.session.emit = AsyncMock()
 
+    async def test_session_title_is_the_display_name_and_updates_without_changing_identity(self):
+        self.assertEqual(self.session.name, "Builder")
+        identity = self.session.bridge_id
+        title = "Review the Orchard session naming and notification behavior " * 2
+        await self.session.event({"method": "thread/name/updated", "params": {
+            "threadId": "thread-one", "threadName": title}})
+        self.assertEqual(self.session.name, title.strip())
+        self.session.emit.assert_awaited_with({"event": "metadata", "name": title.strip()})
+        self.assertEqual(self.session.bridge_id, identity)
+
+    async def test_untitled_sessions_have_readable_fallback_names(self):
+        for name in (None, "", "   "):
+            self.session.thread["name"] = name
+            self.assertEqual(self.session.name, "tmp")
+        self.session.thread["cwd"] = ""
+        self.assertEqual(self.session.name, "Codex session")
+
     async def test_prompt_steer_and_cancel_use_the_same_thread(self):
         await self.session.command({"action": "prompt", "value": {"text": "Check tests"}})
         self.rpc.call.assert_awaited_with("turn/start", {"threadId": "thread-one", "input": [{"type": "text", "text": "Check tests"}]})
@@ -112,10 +129,27 @@ class Sessions(unittest.IsolatedAsyncioTestCase):
 
     async def test_permission_preserves_request_id_and_approves_once(self):
         await self.session.event({"id": "approve-1", "method": "item/fileChange/requestApproval", "params": {"turnId": "turn-one"}})
-        task = asyncio.create_task(self.session.command({"action": "permission", "value": {"approve": True}}))
+        task = asyncio.create_task(self.session.command({"action": "permission", "value": {"approve": True, "question_id": self.session.pending[0].question()["question_id"]}}))
         await asyncio.sleep(0)
         self.rpc.send.assert_awaited_with({"id": "approve-1", "result": {"decision": "accept"}})
         await self.session.event({"method": "serverRequest/resolved", "params": {"requestId": "approve-1"}})
+        await task
+
+    async def test_stale_or_missing_approval_never_accepts_new_request(self):
+        for token in ("old", "new"):
+            await self.session.event({"id": token, "method": "item/fileChange/requestApproval", "params": {}})
+            if token == "old":
+                stale = self.session.pending[0].question()["question_id"]
+                await self.session.event({"method": "serverRequest/resolved", "params": {"requestId": token}})
+        for value in ({"approve": True}, {"approve": True, "question_id": stale}):
+            with self.assertRaisesRegex(ProtocolError, "no longer pending"):
+                await self.session.command({"action": "permission", "value": value})
+        self.rpc.send.assert_not_awaited()
+        current = self.session.pending[0].question()["question_id"]
+        task = asyncio.create_task(self.session.command({"action": "permission", "value": {"approve": False, "question_id": current}}))
+        await asyncio.sleep(0)
+        self.rpc.send.assert_awaited_with({"id": "new", "result": {"decision": "decline"}})
+        await self.session.event({"method": "serverRequest/resolved", "params": {"requestId": "new"}})
         await task
 
     async def test_final_results_not_tool_output_and_not_duplicated(self):
@@ -143,6 +177,17 @@ class Sessions(unittest.IsolatedAsyncioTestCase):
 
 
 class Discovery(unittest.IsolatedAsyncioTestCase):
+    async def test_read_title_is_kept_when_resume_omits_it(self):
+        rpc = SimpleNamespace(call=AsyncMock(side_effect=[{"data": ["thread-one"]},
+            {"thread": {"id": "thread-one", "name": "Builder", "cwd": "/tmp", "source": "cli"}},
+            {"thread": {"id": "thread-one", "status": {"type": "idle"}}}]))
+        adapter = Adapter(rpc, "/unused")
+        async def connect(session):
+            session.task = SimpleNamespace(done=lambda: False)
+        with patch.object(Session, "connect", new=connect):
+            await adapter.discover()
+        self.assertEqual(adapter.sessions["thread-one"].name, "Builder")
+
     async def test_unresumable_thread_is_not_registered(self):
         rpc = SimpleNamespace(call=AsyncMock(side_effect=[{"data": ["empty"]},
             {"thread": {"id": "empty", "source": "cli"}}, ProtocolError("No rollout")]))

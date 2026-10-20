@@ -56,6 +56,18 @@
         activityPython = pkgs.python3.withPackages (p: [ p.pygobject3 p.pycairo ]);
         bridgePython = pkgs.python3.withPackages (p: [ p.websockets ]);
         activityTypelibs = pkgs.lib.makeSearchPath "lib/girepository-1.0" (map pkgs.lib.getLib [ pkgs.gtk4 pkgs.pango pkgs.harfbuzz pkgs.gdk-pixbuf pkgs.graphene pkgs.glib pkgs.gobject-introspection ]);
+        callgraphTool = pkgs.rustPlatform.buildRustPackage {
+          pname = "cargo-callgraph";
+          version = "0.1.0";
+          src = pkgs.fetchCrate {
+            pname = "cargo-callgraph";
+            version = "0.1.0";
+            hash = "sha256-peziMUzp6oZdQsSxan4OwsiOH3OznOrTAEfnyd9e/+c=";
+          };
+          cargoLock.lockFile = ./nix/cargo-callgraph.lock;
+          patches = [ ./nix/cargo-callgraph-impls.patch ];
+          doCheck = false;
+        };
         orchrd = pkgs.rustPlatform.buildRustPackage {
           pname = "orchrd";
           version = "0.1.0";
@@ -69,6 +81,7 @@
               pkgs.lib.cleanSourceFilter path type
               && !(builtins.elem name [
                 "target"
+                "docs"
                 "__pycache__"
                 ".direnv"
                 "result"
@@ -147,6 +160,8 @@
             pkgs.rustc
             pkgs.rustfmt
             pkgs.clippy
+            callgraphTool
+            pkgs.graphviz
             pkgs.gjs
             pkgs.glib
             pkgs.dbus
@@ -156,6 +171,13 @@
             pkgs.gtk4
             pkgs.xvfb-run
           ];
+          shellHook = ''
+            export ORCHRD_REAL_CARGO="${pkgs.cargo}/bin/cargo"
+            export ORCHRD_CALLGRAPH="${callgraphTool}/bin/cargo-callgraph"
+            export ORCHRD_DOT="${pkgs.graphviz}/bin/dot"
+            export ORCHRD_WORKTREE_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            export PATH="$ORCHRD_WORKTREE_ROOT/scripts/dev-bin:$PATH"
+          '';
         };
         checks = { inherit orchrd; };
         formatter = pkgs.nixfmt;
