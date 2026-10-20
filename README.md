@@ -149,7 +149,7 @@ install or configure the coding models used by either frontend.
 ## Requirements
 
 - Nix with flakes enabled
-- NixOS with Home Manager
+- NixOS (the default module includes Home Manager), or an existing Home Manager setup
 - GNOME Shell 50 or 51 (including 51 prereleases)
 - An OpenAI-compatible audio transcription API
 - A shared Codex app server with its adapter, or a patched NOBS build with native
@@ -163,28 +163,73 @@ install or configure the coding models used by either frontend.
 
 ### 1. Add Orchrd to your NixOS flake
 
-Add the repository as an input:
-
-```nix
-inputs.orchrd.url = "github:KacperLa/orchrd";
-```
-
-Make the Home Manager module available and enable Orchrd for your user:
+Add the repository as an input and import its NixOS module. For example, in your
+host's `flake.nix`:
 
 ```nix
 {
-  home-manager.sharedModules = [ orchrd.homeManagerModules.default ];
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    orchrd.url = "github:KacperLa/orchrd";
+    orchrd.inputs.nixpkgs.follows = "nixpkgs";
+  };
 
-  home-manager.users.you = {
-    services.orchrd = {
-      enable = true;
-      configFile = "/home/you/.config/orchrd/config.toml";
+  outputs = { nixpkgs, orchrd, ... }: {
+    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix # Defines your normal desktop user and GNOME setup.
+        orchrd.nixosModules.default
+        {
+          services.orchrd = {
+            enable = true;
+            user = "you"; # An existing NixOS user.
+            enableCodex = true;
+            startCodexServer = true;
+            # codexCommand = "/absolute/path/to/codex";
+            # environmentFile = "/run/secrets/orchrd";
+          };
+        }
+      ];
     };
   };
 }
 ```
 
+Rebuild with `sudo nixos-rebuild switch --flake .#my-host`. The module includes
+Home Manager and enables Orchrd for `services.orchrd.user`; importing an existing
+Home Manager module alongside it is supported. If your host already has a
+`home-manager` flake input, also set
+`inputs.orchrd.inputs.home-manager.follows = "home-manager"` so both use the same
+module version. Orchrd defaults to the user's
+`~/.config/orchrd/config.toml`. Install Codex separately so `codex` is on the
+service PATH, or set `codexCommand` to its absolute path. The configuration file,
+provider credentials, and local TTS assets are supplied in the following steps.
+
+All service options, including `enablePocketTts`, `codexSocket`, `configFile`, and
+`environmentFile`, work under `services.orchrd`. When configuring an existing
+Home Manager user, that user's `home.stateVersion` is preserved; for a new Home
+Manager user it defaults to the host's `system.stateVersion`.
+
+For a standalone or already configured Home Manager setup, you can instead import
+`orchrd.homeManagerModules.default` into your home configuration:
+
+```nix
+{
+  imports = [ orchrd.homeManagerModules.default ];
+  services.orchrd = {
+    enable = true;
+    enableCodex = true;
+    startCodexServer = true;
+  };
+}
+```
+
 After rebuilding, enable Orchrd using the GNOME Extensions application.
+
+The root flake exports `nixosModules.default`, `nixosModules.apple-tv-remote`,
+`homeManagerModules.default`, and `packages.<system>.default`. To install only
+the tools, add `orchrd.packages.${pkgs.system}.default` to your packages.
 
 The module installs Orchrd into the user profile and creates two user services:
 
@@ -530,7 +575,7 @@ gsettings set org.gnome.shell.extensions.orchrd push-to-talk "['Print']"
 ### Apple TV remote input
 
 [`apple_tv_remote/`](apple_tv_remote/) contains copies of the deployed Apple TV
-remote mouse and microphone scripts, plus their NixOS service module. The scripts
+remote mouse and microphone scripts, plus a configurable NixOS service module. The scripts
 match the Nix store versions used by the running services when copied into this
 repository. They are separate system services from the Home Manager user services.
 
@@ -543,11 +588,23 @@ repository. They are separate system services from the Home Manager user service
 - `apple-remote.nix` configures both services, device access, dependencies, and
   Bluetooth monitoring capabilities.
 
-To deploy these copies, import `apple_tv_remote/apple-remote.nix` from your NixOS
-configuration and rebuild. Review its host-specific username, UID, profile path,
-and the default Bluetooth MAC in both scripts first. The microphone service needs
-the user's PipeWire session and an installed `orchrdctl`. Copying the files into
-this repository does not switch the running services to this location.
+To enable the remote, add this module alongside `orchrd.nixosModules.default`:
+
+```nix
+{
+  imports = [ orchrd.nixosModules.apple-tv-remote ];
+  users.users.you.uid = 1000; # Use your user's existing numeric UID.
+  services.apple-tv-remote = {
+    enable = true;
+    user = "you";
+    macAddress = "AA:BB:CC:DD:EE:FF"; # Your paired remote's Bluetooth address.
+  };
+}
+```
+
+The module derives the runtime directory and profile path from that user and
+passes the configured MAC to both scripts. Pair the remote first. The microphone
+service needs the user's PipeWire session and an installed `orchrdctl`.
 
 ## Native activity window
 
@@ -648,6 +705,11 @@ In that shell, successful `cargo build`, `cargo check`, `cargo test`, and
 `cargo clippy` commands regenerate the [static call graph](docs/call-graph/README.md).
 `cargo run` and `cargo bench` regenerate it before starting the program.
 You can also run `python3 scripts/regenerate_call_graph.py` in the shell.
+
+Check the NixOS and Home Manager module integration without building the full
+application with `nix build .#checks.x86_64-linux.module-evaluation --no-link`
+(substitute your platform if needed). `nix flake check` includes this check and
+the application package checks.
 
 Build the complete package, including the extension and TTS worker:
 

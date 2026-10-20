@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
+    home-manager = {
+      url = "github:nix-community/home-manager/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     pocket-tts-src = {
       url = "github:kyutai-labs/pocket-tts/v2.1.0";
       flake = false;
@@ -15,6 +19,7 @@
       self,
       nixpkgs,
       flake-utils,
+      home-manager,
       pocket-tts-src,
     }:
     let
@@ -22,6 +27,8 @@
     in
     {
       homeManagerModules.default = module;
+      nixosModules.default = import ./nix/nixos-module.nix self home-manager;
+      nixosModules.apple-tv-remote = import ./apple_tv_remote/apple-remote.nix;
     }
     // flake-utils.lib.eachDefaultSystem (
       system:
@@ -179,7 +186,12 @@
             export PATH="$ORCHRD_WORKTREE_ROOT/scripts/dev-bin:$PATH"
           '';
         };
-        checks = { inherit orchrd; };
+        checks = {
+          inherit orchrd;
+          module-evaluation = import ./nix/module-checks.nix {
+            inherit self nixpkgs home-manager pkgs system;
+          };
+        };
         formatter = pkgs.nixfmt;
       }
     );

@@ -8,43 +8,19 @@ self:
 let
   cfg = config.services.orchrd;
   servicePath = "%h/.nix-profile/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-  codexSocket = if cfg.codexSocket != null then cfg.codexSocket
-    else if cfg.startCodexServer then "%t/orchrd-codex/server.sock"
-    else "${config.home.homeDirectory}/.codex/app-server-control/app-server-control.sock";
+  codexSocket =
+    if cfg.codexSocket != null then
+      cfg.codexSocket
+    else if cfg.startCodexServer then
+      "%t/orchrd-codex/server.sock"
+    else
+      "${config.home.homeDirectory}/.codex/app-server-control/app-server-control.sock";
 in
 {
-  options.services.orchrd = {
-    enable = lib.mkEnableOption "Orchrd voice control";
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = self.packages.${pkgs.system}.default;
-    };
-    configFile = lib.mkOption {
-      type = lib.types.str;
-      default = "${config.xdg.configHome}/orchrd/config.toml";
-    };
-    enablePocketTts = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = "Run the local Pocket TTS worker; disable when tts.provider is openai_compatible";
-    };
-    enableCodex = lib.mkEnableOption "the bridge to existing shared Codex daemon sessions";
-    startCodexServer = lib.mkEnableOption "a shared local Codex app server managed alongside the bridge";
-    codexCommand = lib.mkOption {
-      type = lib.types.str;
-      default = "codex";
-      description = "Codex executable used when startCodexServer is enabled";
-    };
-    codexSocket = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Shared Codex control socket; null uses the managed server socket when startCodexServer is enabled, otherwise Codex's default";
-    };
-    environmentFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Runtime environment file containing provider API keys (keep outside the Nix store)";
-    };
+  options.services.orchrd = import ./service-options.nix {
+    inherit lib;
+    package = self.packages.${pkgs.system}.default;
+    configFile = "${config.xdg.configHome}/orchrd/config.toml";
   };
 
   config = lib.mkIf cfg.enable {
@@ -62,12 +38,21 @@ in
       Service = {
         Type = "simple";
         ExecStart = "${pkgs.writeShellScript "orchrd-codex-server" ''
-          exec ${lib.escapeShellArgs [ cfg.codexCommand "app-server" "--listen" ]} "unix://$ORCHRD_CODEX_SOCKET"
+          exec ${
+            lib.escapeShellArgs [
+              cfg.codexCommand
+              "app-server"
+              "--listen"
+            ]
+          } "unix://$ORCHRD_CODEX_SOCKET"
         ''}";
         RuntimeDirectory = "orchrd-codex";
         RuntimeDirectoryMode = "0700";
         UMask = "0077";
-        Environment = [ "PATH=${servicePath}" "ORCHRD_CODEX_SOCKET=${codexSocket}" ];
+        Environment = [
+          "PATH=${servicePath}"
+          "ORCHRD_CODEX_SOCKET=${codexSocket}"
+        ];
         Restart = "on-failure";
         RestartSec = 5;
       };
@@ -83,7 +68,11 @@ in
       };
       Service = {
         Type = "simple";
-        ExecStart = lib.escapeShellArgs [ "${cfg.package}/bin/orchrd-codex" "--codex-socket" codexSocket ];
+        ExecStart = lib.escapeShellArgs [
+          "${cfg.package}/bin/orchrd-codex"
+          "--codex-socket"
+          codexSocket
+        ];
         Environment = [ "PATH=${servicePath}" ];
         Restart = "on-failure";
         RestartSec = 5;
