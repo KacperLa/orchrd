@@ -8,6 +8,12 @@ let
   cfg = config.services.apple-tv-remote;
   account = config.users.users.${cfg.user};
   runtimeDir = "/run/user/${toString account.uid}";
+  # The mouse script imports sibling modules, so the directory is one store path.
+  source = builtins.path {
+    path = ./.;
+    name = "apple-tv-remote";
+    filter = path: type: baseNameOf path != "__pycache__";
+  };
   macArgument = lib.escapeShellArgs [
     "--mac"
     cfg.macAddress
@@ -76,7 +82,7 @@ in
       description = "Apple remote touchpad and automatic Bluetooth connection";
       serviceConfig = protection // {
         SupplementaryGroups = [ "uinput" ];
-        ExecStart = "${python}/bin/python ${./apple_remote_mouse.py} ${macArgument}";
+        ExecStart = "${python}/bin/python ${source}/apple_remote_mouse.py ${macArgument}";
       };
     };
     systemd.services.apple-remote-mic = common // {
@@ -98,7 +104,7 @@ in
           "CAP_NET_RAW"
           "CAP_NET_ADMIN"
         ];
-        ExecStart = "${python}/bin/python ${./apple_remote_mic.py} --direct-monitor ${macArgument}";
+        ExecStart = "${python}/bin/python ${source}/apple_remote_mic.py --direct-monitor ${macArgument}";
       };
     };
   };

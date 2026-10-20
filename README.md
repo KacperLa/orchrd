@@ -566,7 +566,9 @@ match the Nix store versions used by the running services when copied into this
 repository. They are separate system services from the Home Manager user services.
 
 - `apple_remote_mouse.py` connects the Bluetooth remote and translates touchpad
-  reports into mouse input through uinput.
+  reports into mouse input through uinput. Touching the right edge scrolls
+  vertically, touching the top edge scrolls horizontally, and clicking in the
+  top-right corner is a right click. `apple_remote_zones.py` holds those zones.
 - `apple_remote_mic.py` decodes the remote's Opus audio into a virtual PipeWire
   microphone. Holding Siri selects that microphone and calls `orchrdctl start`;
   releasing Siri calls `orchrdctl stop` after draining the audio, then restores
