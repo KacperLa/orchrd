@@ -61,6 +61,7 @@ struct Extracted {
     purpose: String,
     input_mode: String,
     question: String,
+    approval_context: Option<ApprovalContext>,
     options: Vec<ExtractedOption>,
     allows_custom_answer: Option<bool>,
     interaction: Interaction,
@@ -73,6 +74,12 @@ struct ExtractedOption {
     effect: String,
     shortcut: Option<String>,
     selected: Option<bool>,
+}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ApprovalContext {
+    summary: String,
+    evidence: Vec<String>,
 }
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -140,6 +147,16 @@ pub(crate) fn present(value: Value, capture: &Capture, route: Route) -> Result<(
     if let Some(instructions) = &extracted.interaction.instructions {
         quotes.push(instructions);
     }
+    if let Some(context) = &extracted.approval_context {
+        if extracted.purpose != "permission"
+            || context.summary.trim().is_empty()
+            || context.summary.chars().count() > 600
+            || context.evidence.is_empty()
+        {
+            bail!("invalid approval context")
+        }
+        quotes.extend(context.evidence.iter().map(String::as_str));
+    }
     if quotes
         .iter()
         .any(|quote| quote.trim().is_empty() || !capture.screen.contains(quote))
@@ -202,6 +219,9 @@ pub(crate) fn present(value: Value, capture: &Capture, route: Route) -> Result<(
         }
         .into(),
         body: extracted.question,
+        command_purpose: extracted
+            .approval_context
+            .map(|context| context.summary.trim().to_owned()),
         options: extracted
             .options
             .into_iter()
@@ -261,8 +281,45 @@ mod tests {
     fn extraction() -> Value {
         json!({"status":"active","complete":true,"purpose":"clarification","input_mode":"single_choice",
             "question":"Choose destination:","options":[{"label":"Local","effect":"other","shortcut":null,"selected":null},
-            {"label":"Cloud","effect":"other","shortcut":null,"selected":null}],"allows_custom_answer":null,
+            {"label":"Cloud","effect":"other","shortcut":null,"selected":null}],"approval_context":null,"allows_custom_answer":null,
             "interaction":{"method":"unknown","selected_index":0,"instructions":null},"evidence":["Choose destination:"]})
+    }
+    #[test]
+    fn permission_speech_explains_the_current_command_without_changing_its_controls() {
+        let mut capture = capture();
+        capture.screen = "Would you like to run the following command?\nReason: Record remaining layout issues.\n$ kicad-cli pcb drc --refill-zones\n  --output build/drc.json board.kicad_pcb\n1. Yes, proceed\n2. No\n".into();
+        let mut value = extraction();
+        value["purpose"] = json!("permission");
+        value["question"] = json!("Would you like to run the following command?");
+        value["evidence"] = json!(["Would you like to run the following command?"]);
+        value["options"] = json!([
+            {"label":"Yes, proceed","effect":"allow_once","shortcut":null,"selected":null},
+            {"label":"No","effect":"deny","shortcut":null,"selected":null}
+        ]);
+        value["approval_context"] = json!({
+            "summary":"This will refill PCB zones, run design-rule checks, and write a JSON report.",
+            "evidence":["$ kicad-cli pcb drc --refill-zones\n  --output build/drc.json board.kicad_pcb", "Record remaining layout issues."]
+        });
+        let (question, metadata) = present(value.clone(), &capture, Route::Modal).unwrap();
+        assert!(question.speech().contains("refill PCB zones"));
+        assert!(question.speech().contains("Option 1: Yes, proceed"));
+        assert_eq!(
+            question.body,
+            "Would you like to run the following command?"
+        );
+        assert_eq!(metadata["options"], value["options"]);
+        assert_eq!(metadata["interaction"], value["interaction"]);
+
+        // Summaries may paraphrase, but their supporting quotations must match.
+        value["approval_context"]["evidence"] = json!(["invented command"]);
+        assert!(present(value.clone(), &capture, Route::Modal).is_err());
+        value["approval_context"]["evidence"] = json!([]);
+        assert!(present(value.clone(), &capture, Route::Modal).is_err());
+        value["approval_context"] = Value::Null;
+        let (question, _) = present(value, &capture, Route::Modal).unwrap();
+        assert!(question
+            .speech()
+            .contains("Check the terminal before approving"));
     }
     #[test]
     fn grounded_complete_questions_can_be_read_without_guessed_controls() {
@@ -270,6 +327,7 @@ mod tests {
         assert_eq!(question.options.len(), 2);
         assert!(question.speech().contains("Option 2: Cloud"));
         assert!(!question.allow_custom);
+        assert!(!question.speech().contains("command's purpose"));
     }
     #[test]
     fn incomplete_invented_or_malformed_extractions_are_not_presented() {

@@ -28,6 +28,8 @@ visible terminal text, so a truncated response can be missed.
 - Hear a short summary when an observed agent finishes responding.
 - Answer with a choice, multiple selections, or custom text when supported.
 - Approve a request once, deny it, or explicitly select a persistent permission.
+- Hear what the proposed command will do before its approval choices. When the
+  purpose is unavailable, Orchrd asks you to check the terminal before approving.
 - Cancel agent work, request a readout, and repeat the last spoken response.
 - Inspect routing, extraction, delivery, and speech in a native GTK activity window.
 - Use your desktop microphone or an optional Apple TV remote.

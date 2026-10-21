@@ -58,3 +58,17 @@ or focus marker does not mean checked. Never infer checked state from focus.
 The question must quote the substantive request itself, not a generic keyboard
 instruction such as Press Enter to confirm or Escape to cancel. If only those
 controls are visible and the substantive request is missing, set complete false.
+
+For a permission request, also extract approval_context: an object with summary
+and evidence, or null if the proposed action is not visible. summary is one short
+plain-language sentence explaining what approving the CURRENT command/action
+would do. This is a paraphrase, not a verbatim quotation. Use the visible command,
+arguments, targets, and reason; mention meaningful side effects such as modifying
+files, installing software, deleting data, or sending data when visible. Do not
+claim the action is safe, successful, harmless, or read-only without evidence.
+Do not merely repeat 'run the following command' or summarize unrelated earlier
+work. evidence is a nonempty list of exact substrings quoting the current command
+or action and its visible reason, preserving line breaks and indentation. Keep
+the generic approval question and options verbatim in their existing fields;
+never insert the paraphrase there. For non-permission, none, or uncertain results,
+approval_context must be null. If no meaningful purpose is supported, use null.

@@ -8,6 +8,8 @@ pub(crate) struct Question {
     pub question_kind: String,
     pub title: String,
     pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_purpose: Option<String>,
     pub options: Vec<OptionItem>,
     pub multiple: bool,
     pub allow_custom: bool,
@@ -57,6 +59,13 @@ impl Question {
         Ok(())
     }
     pub fn speech(&self) -> String {
+        let context = if self.question_kind == "permission" {
+            self.command_purpose.as_deref().unwrap_or(
+                "The command's purpose is not visible. Check the terminal before approving.",
+            )
+        } else {
+            ""
+        };
         let options = self
             .options
             .iter()
@@ -65,8 +74,9 @@ impl Question {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "{} {} {}{}",
+            "{} {} {} {}{}",
             self.body,
+            context,
             options,
             if self.multiple {
                 "You can choose more than one. "
@@ -163,6 +173,7 @@ mod tests {
         let router = crate::routing::Router::new(&crate::config::Routing::default()).unwrap();
         let mut question = Question {
             question_id: "evaluation-only".into(),
+            command_purpose: None,
             question_kind: "question".into(),
             title: "Scope".into(),
             body: "What do you mean by check the case?".into(),
@@ -224,6 +235,7 @@ mod tests {
     fn answer_validation_and_spoken_choices() {
         let q = Question {
             question_id: "q1".into(),
+            command_purpose: None,
             question_kind: "question".into(),
             title: "Scope".into(),
             body: "What should I check?".into(),
@@ -305,6 +317,7 @@ mod tests {
     fn speech_transport_preserves_all_choices() {
         let q = Question {
             question_id: "q2".into(),
+            command_purpose: None,
             question_kind: "question".into(),
             title: "Scope".into(),
             body: "What should I check?".into(),

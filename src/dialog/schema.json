@@ -117,6 +117,28 @@
       "items": {
         "type": "string"
       }
+    },
+    "approval_context": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "evidence"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -128,7 +150,8 @@
     "options",
     "allows_custom_answer",
     "interaction",
-    "evidence"
+    "evidence",
+    "approval_context"
   ],
   "additionalProperties": false
 }

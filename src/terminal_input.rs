@@ -349,6 +349,7 @@ mod tests {
             "interaction":{"method":"typed_shortcut","selected_index":0,"instructions":"Press enter to confirm or esc to cancel"}});
         let q = Question {
             question_id: "q1".into(),
+            command_purpose: None,
             question_kind: if permission { "permission" } else { "question" }.into(),
             title: "Test".into(),
             body: "Choose destination:".into(),

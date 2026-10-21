@@ -821,7 +821,7 @@ mod tests {
                 "input_mode":"single_choice","question":"Run the command?",
                 "options":[{"label":"Yes, proceed","effect":"allow_once","shortcut":"y","selected":null},
                     {"label":"Always allow","effect":"allow_persistent","shortcut":"p","selected":null},
-                    {"label":"No","effect":"deny","shortcut":"esc","selected":null}],"allows_custom_answer":false,
+                    {"label":"No","effect":"deny","shortcut":"esc","selected":null}],"approval_context":null,"allows_custom_answer":false,
                 "interaction":{"method":"typed_shortcut","selected_index":0,"instructions":"Press enter to confirm or esc to cancel"},
                 "evidence":["Run the command?"]});
             let route = if conversation {
@@ -987,7 +987,7 @@ mod tests {
         f.client.poll().await.unwrap();
         let capture = f.client.capture(&f.expected.name).await.unwrap();
         let value = json!({"status":"active","complete":true,"purpose":"clarification","input_mode":"free_text",
-            "question":"Project name?","options":[],"allows_custom_answer":true,
+            "question":"Project name?","options":[],"approval_context":null,"allows_custom_answer":true,
             "interaction":{"method":"text_entry","selected_index":null,"instructions":"Press Enter to submit"},"evidence":["Project name?"]});
         let (q, v) = crate::dialog::present(value, &capture, Route::Modal).unwrap();
         f.client.store(&capture, q.clone(), v, false).await;
@@ -1235,6 +1235,7 @@ esac
         let capture = f.client.capture(&remote.name).await.unwrap();
         let question = Question {
             question_id: "q".into(),
+            command_purpose: None,
             question_kind: "question".into(),
             title: "Question".into(),
             body: "Choose?".into(),
@@ -1407,6 +1408,7 @@ esac
         assert!(client.next().await.is_some()); // The changed screen can now be scanned.
         let q = Question {
             question_id: "old".into(),
+            command_purpose: None,
             question_kind: "question".into(),
             title: "old".into(),
             body: "old".into(),
