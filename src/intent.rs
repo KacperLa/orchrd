@@ -99,17 +99,6 @@ impl IntentClient {
             .map(str::to_owned)
             .context("summary response omitted speech")
     }
-    pub async fn describe_blocker(&self, agent: &str, output: &str) -> Result<String> {
-        let system = "Explain a coding agent's latest question or approval request for speech. Return JSON with one string field named speech. Name the agent and exactly what input is needed in at most two short sentences. Do not use markdown.";
-        let user = json!({"agent":agent,"agent_output":redact(output)}).to_string();
-        let content = self.complete(system, &user).await?;
-        let value: Value = parse_value(&content)?;
-        value
-            .get("speech")
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-            .context("blocker response omitted speech")
-    }
     async fn complete(&self, system: &str, user: &str) -> Result<String> {
         let response=self.post().json(&json!({"model":self.model,"temperature":0,"messages":[{"role":"system","content":system},{"role":"user","content":user}]})).send().await.map_err(|e| e.without_url()).context("call intent API")?;
         let status = response.status();

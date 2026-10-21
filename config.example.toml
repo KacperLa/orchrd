@@ -1,9 +1,8 @@
 [agents]
-# "bridge" keeps structured Codex/NOBS connectors. "herdr" discovers agents
-# directly and delivers prompts/answers through grounded terminal controls.
-backend = "bridge"
+# Discover agents and deliver prompts/answers through Herdr terminal controls.
 herdr_command = "herdr"
 herdr_session = "default"
+discover_remote = true # Include enabled machines saved in Herdr.
 screen_lines = 30
 poll_seconds = 2
 

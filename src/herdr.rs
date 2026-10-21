@@ -7,6 +7,7 @@ use crate::{
     terminal_input::{self, InputPlan},
 };
 use anyhow::{bail, Context, Result};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -31,6 +32,20 @@ struct Entry {
     question: Option<Value>,
     route: Option<Route>,
 }
+#[derive(Debug, Clone, Deserialize)]
+struct Machine {
+    id: String,
+    label: String,
+    target: String,
+    session: String,
+    enabled: bool,
+}
+#[derive(Clone)]
+enum Source {
+    Local,
+    Remote(Machine),
+}
+
 impl Herdr {
     pub fn new(settings: Agents) -> Self {
         Self {
@@ -41,10 +56,21 @@ impl Herdr {
         }
     }
     async fn run(&self, args: &[&str]) -> Result<String> {
+        self.run_at(&Source::Local, args).await
+    }
+    async fn run_at(&self, source: &Source, args: &[&str]) -> Result<String> {
+        let mut command = Command::new(&self.settings.herdr_command);
+        match source {
+            Source::Local => {
+                command.args(["--session", &self.settings.herdr_session]);
+            }
+            Source::Remote(machine) => {
+                command.args(["--machine", &machine.id]);
+            }
+        }
         let output = timeout(
             Duration::from_secs(5),
-            Command::new(&self.settings.herdr_command)
-                .args(["--session", &self.settings.herdr_session])
+            command
                 .args(args)
                 .stdin(Stdio::null())
                 .kill_on_drop(true)
@@ -70,23 +96,127 @@ impl Herdr {
         }
         String::from_utf8(output.stdout).context("Herdr output is not UTF-8")
     }
-    async fn roster(&self) -> Result<Vec<AgentInfo>> {
-        let value: Value = serde_json::from_str(&self.run(&["agent", "list"]).await?)?;
-        parse_roster(&value, &self.settings.herdr_session)
+    async fn machines(&self) -> Result<Vec<Machine>> {
+        let machines: Vec<Machine> =
+            serde_json::from_str(&self.run(&["machine", "list", "--json"]).await?)
+                .context("decode Herdr saved machines")?;
+        let mut ids = HashSet::new();
+        for machine in &machines {
+            if machine.id.is_empty()
+                || !machine
+                    .id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || machine.session.is_empty()
+                || machine.target.is_empty()
+                || !ids.insert(machine.id.clone())
+            {
+                bail!("Herdr returned an invalid or duplicate machine identity")
+            }
+        }
+        Ok(machines.into_iter().filter(|m| m.enabled).collect())
     }
-    async fn screen(&self, id: &str) -> Result<String> {
+    async fn source_for(&self, id: &str) -> Result<(Source, String)> {
+        if let Some(remote) = id.strip_prefix("remote:") {
+            let (machine_id, pane) = remote.split_once(':').context("Invalid remote agent ID")?;
+            if !self.settings.discover_remote || pane.is_empty() {
+                bail!("Remote agent discovery is disabled or the agent ID is invalid")
+            }
+            let machine = self
+                .machines()
+                .await?
+                .into_iter()
+                .find(|m| m.id == machine_id)
+                .context("Remote machine is disabled or no longer saved")?;
+            Ok((Source::Remote(machine), pane.into()))
+        } else {
+            Ok((Source::Local, id.into()))
+        }
+    }
+    async fn roster_at(&self, source: &Source) -> Result<Vec<AgentInfo>> {
+        let value: Value = serde_json::from_str(&self.run_at(source, &["agent", "list"]).await?)?;
+        let session = match source {
+            Source::Local => &self.settings.herdr_session,
+            Source::Remote(machine) => &machine.session,
+        };
+        let mut agents = parse_roster(&value, session)?;
+        if let Source::Remote(machine) = source {
+            for agent in &mut agents {
+                agent.name = format!("remote:{}:{}", machine.id, agent.name);
+                // Include the destination and saved session as well as the machine ID:
+                // editing a saved machine cannot silently retarget an old question.
+                agent.instance_id = serde_json::to_string(&(
+                    "remote",
+                    &machine.id,
+                    &machine.target,
+                    session,
+                    &agent.instance_id,
+                ))?;
+                agent.display_name = format!("{} @ {}", agent.display_name, machine.label);
+            }
+        }
+        Ok(agents)
+    }
+    async fn roster(&self) -> Result<Vec<AgentInfo>> {
+        let mut sources = vec![Source::Local];
+        if self.settings.discover_remote {
+            match self.machines().await {
+                Ok(machines) => sources.extend(machines.into_iter().map(Source::Remote)),
+                Err(error) => tracing::warn!(%error, "Herdr remote discovery unavailable"),
+            }
+        }
+        let mut jobs = tokio::task::JoinSet::new();
+        for source in sources {
+            let client = self.clone();
+            jobs.spawn(async move {
+                let label = match &source {
+                    Source::Local => "local",
+                    Source::Remote(machine) => &machine.label,
+                };
+                client
+                    .roster_at(&source)
+                    .await
+                    .with_context(|| format!("Herdr roster for {label}"))
+            });
+        }
+        let mut agents = Vec::new();
+        let mut succeeded = false;
+        let mut last_error = None;
+        while let Some(result) = jobs.join_next().await {
+            match result.context("Herdr roster worker panicked")? {
+                Ok(roster) => {
+                    succeeded = true;
+                    agents.extend(roster);
+                }
+                Err(error) => {
+                    tracing::warn!(error=?error, "Herdr machine roster unavailable");
+                    last_error = Some(error);
+                }
+            }
+        }
+        if !succeeded {
+            return Err(last_error.unwrap_or_else(|| anyhow::anyhow!("No roster returned")))
+                .context("No Herdr machine roster is available");
+        }
+        agents.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(agents)
+    }
+    async fn screen_at(&self, source: &Source, pane: &str) -> Result<String> {
         let screen = self
-            .run(&[
-                "agent",
-                "read",
-                id,
-                "--source",
-                "visible",
-                "--lines",
-                &self.settings.screen_lines.to_string(),
-                "--format",
-                "text",
-            ])
+            .run_at(
+                source,
+                &[
+                    "agent",
+                    "read",
+                    pane,
+                    "--source",
+                    "visible",
+                    "--lines",
+                    &self.settings.screen_lines.to_string(),
+                    "--format",
+                    "text",
+                ],
+            )
             .await?;
         // Bound the captured *bottom*, even on Herdr versions that return more
         // visible lines than requested. Preserve the full question or inspect.
@@ -97,16 +227,23 @@ impl Herdr {
         }
         Ok(screen)
     }
+    async fn screen(&self, id: &str) -> Result<String> {
+        let (source, pane) = self.source_for(id).await?;
+        self.screen_at(&source, &pane).await
+    }
     pub async fn capture(&self, id: &str) -> Result<Capture> {
+        let (source, pane) = self.source_for(id).await?;
         let before = self
-            .roster()
+            .roster_at(&source)
             .await?
             .into_iter()
             .find(|a| a.name == id)
             .context("Herdr agent disappeared")?;
-        let screen = self.screen(id).await?;
+        let screen = self.screen_at(&source, &pane).await?;
+        // Resolve again to detect disabled, removed, or retargeted saved machines.
+        let (after_source, _) = self.source_for(id).await?;
         let after = self
-            .roster()
+            .roster_at(&after_source)
             .await?
             .into_iter()
             .find(|a| a.name == id)
@@ -324,8 +461,26 @@ impl Herdr {
                 .then(|| json!({"agent_id":id,"agent_name":entry.capture.agent.display_name,"question":value["question"]}))
         }).collect::<Vec<_>>())
     }
-    async fn input(&self, args: &[&str]) -> Result<()> {
-        let raw = self.run(args).await?;
+    async fn input(&self, expected: &AgentInfo, args: &[&str]) -> Result<()> {
+        let id = args.get(2).context("Herdr input omitted agent ID")?;
+        if *id != expected.name {
+            bail!("Herdr input target changed")
+        }
+        let (source, pane) = self.source_for(id).await?;
+        if let Source::Remote(machine) = &source {
+            let identity: Value = serde_json::from_str(&expected.instance_id)
+                .context("Remote agent omitted machine identity")?;
+            if identity[0] != "remote"
+                || identity[1] != machine.id
+                || identity[2] != machine.target
+                || identity[3] != machine.session
+            {
+                bail!("Remote machine changed before input delivery")
+            }
+        }
+        let mut args = args.to_vec();
+        args[2] = &pane;
+        let raw = self.run_at(&source, &args).await?;
         let value: Value = serde_json::from_str(&raw)
             .context("Herdr input receipt was not JSON; outcome is unconfirmed")?;
         if value.get("error").is_some() || value.get("result").is_none() {
@@ -444,8 +599,11 @@ impl Herdr {
             }
         }
         let args = input_args(&expected.name, plan);
-        self.input(&args.iter().map(String::as_str).collect::<Vec<_>>())
-            .await
+        self.input(
+            expected,
+            &args.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+        .await
     }
 
     pub async fn retry(&self) {
@@ -493,10 +651,11 @@ fn parse_roster(value: &Value, session: &str) -> Result<Vec<AgentInfo>> {
             .as_ref()
             .and_then(|p| p.file_name())
             .and_then(|s| s.to_str())
-            .unwrap_or(pane);
+            .or_else(|| value["agent"].as_str())
+            .unwrap_or("Agent");
         let status = value["agent_status"].as_str().unwrap_or("unknown");
         out.push(AgentInfo {
-            display_name: format!("{project} ({pane})"),
+            display_name: project.into(),
             name: pane.into(),
             kind: value["agent"].as_str().map(str::to_owned),
             instance_id: format!("{session}:{terminal}"),
@@ -504,6 +663,25 @@ fn parse_roster(value: &Value, session: &str) -> Result<Vec<AgentInfo>> {
             status: status.into(),
             state_change_seq: value["state_change_seq"].as_u64(),
         });
+    }
+    let counts = out
+        .iter()
+        .fold(HashMap::<String, usize>::new(), |mut counts, agent| {
+            *counts.entry(agent.display_name.clone()).or_default() += 1;
+            counts
+        });
+    for agent in &mut out {
+        if counts[&agent.display_name] > 1 {
+            if let Some(title) = agents
+                .iter()
+                .find(|v| v["pane_id"] == agent.name)
+                .and_then(|v| v["terminal_title_stripped"].as_str())
+                .and_then(|s| s.split(" | ").next())
+                .filter(|s| !s.trim().is_empty())
+            {
+                agent.display_name = format!("{}: {}", agent.display_name, title.trim());
+            }
+        }
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(out)
@@ -539,6 +717,23 @@ fn input_args(target: &str, plan: InputPlan) -> Vec<String> {
 mod tests {
     use super::*;
     use std::{fs, os::unix::fs::PermissionsExt};
+    // Only the installer child opens the executable for writing. Otherwise a
+    // concurrent fork can inherit the parent's writer FD until exec and make
+    // another test's exec fail with ETXTBSY even after fs::write returned.
+    fn install_script(path: &std::path::Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+        let staging = path.with_extension("script");
+        fs::write(&staging, contents)?;
+        let status = std::process::Command::new("install")
+            .args(["-m", "700"])
+            .arg(&staging)
+            .arg(path)
+            .status()?;
+        fs::remove_file(staging)?;
+        if !status.success() {
+            return Err(std::io::Error::other("install mock executable failed"));
+        }
+        Ok(())
+    }
     fn roster(terminal: &str, status: &str) -> Value {
         json!({"result":{"agents":[{"pane_id":"w1:p1","terminal_id":terminal,
             "agent":"example-agent","agent_status":status,"state_change_seq":4,
@@ -568,11 +763,12 @@ mod tests {
                 .map(|p| p.join("bash"))
                 .find(|p| p.is_file())
                 .unwrap();
-            fs::write(&command,format!("#!{}\ncase \"$4\" in\nlist) cat '{}' ;;\nread) cat '{}' ;;\nprompt|send-keys) printf '%s\\0' \"$@\" >> '{}'; cat '{}' ;;\n*) exit 99 ;;\nesac\n",
+            install_script(&command,format!("#!{}\ncase \"$4\" in\nlist) cat '{}' ;;\nread) cat '{}' ;;\nprompt|send-keys) printf '%s\\0' \"$@\" >> '{}'; cat '{}' ;;\n*) exit 99 ;;\nesac\n",
                 shell.display(),roster_file.display(),screen.display(),log.display(),receipt.display())).unwrap();
             fs::set_permissions(&command, fs::Permissions::from_mode(0o700)).unwrap();
             let client = Herdr::new(Agents {
                 herdr_command: command.to_string_lossy().into_owned(),
+                discover_remote: false,
                 ..Agents::default()
             });
             let expected = client.poll().await.unwrap().remove(0);
@@ -777,7 +973,7 @@ mod tests {
         let mut f = ControlFixture::new("idle").await;
         let script = fs::read_to_string(&f.client.settings.herdr_command).unwrap();
         let rejected = f._directory.path().join("rejected-herdr");
-        fs::write(
+        install_script(
             &rejected,
             format!("{}\nexit 2\n", script.lines().next().unwrap()),
         )
@@ -822,11 +1018,272 @@ mod tests {
         }
     }
 
+    struct MachineFixture {
+        _directory: tempfile::TempDir,
+        client: Herdr,
+        machines: std::path::PathBuf,
+        remote_roster: std::path::PathBuf,
+        log: std::path::PathBuf,
+    }
+    impl MachineFixture {
+        fn new() -> Self {
+            let directory = tempfile::tempdir().unwrap();
+            let command = directory.path().join("herdr");
+            let machines = directory.path().join("machines.json");
+            let local_roster = directory.path().join("local.json");
+            let remote_roster = directory.path().join("remote.json");
+            let log = directory.path().join("input");
+            fs::write(&machines, json!([
+                {"id":"one","label":"Lab","target":"user@lab","session":"work","enabled":true},
+                {"id":"two","label":"Second","target":"user@second","session":"work","enabled":true},
+                {"id":"disabled","label":"Disabled","target":"user@disabled","session":"default","enabled":false},
+                {"id":"offline","label":"Offline","target":"user@offline","session":"default","enabled":true}
+            ]).to_string()).unwrap();
+            // Identical pane AND terminal IDs on all machines must remain distinct.
+            fs::write(&local_roster, roster("t1", "idle").to_string()).unwrap();
+            fs::write(&remote_roster, roster("t1", "idle").to_string()).unwrap();
+            let shell = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                .map(|p| p.join("bash"))
+                .find(|p| p.is_file())
+                .unwrap();
+            install_script(
+                &command,
+                format!(
+                    r##"#!{}
+selector="$1"
+source="$2"
+if [ "$selector" = --session ]; then source=local; fi
+shift 2
+case "$1 $2" in
+'machine list') cat '{}' ;;
+'agent list')
+  case "$source" in
+    local) cat '{}' ;;
+    one|two) cat '{}' ;;
+    *) exit 1 ;;
+  esac ;;
+'agent read') printf '%s\n' "$source screen" ;;
+'agent prompt'|'agent send-keys')
+  printf '%s\0' "$selector" "$source" "$@" >> '{}'
+  printf '%s\n' '{{"result":{{}}}}' ;;
+*) exit 99 ;;
+esac
+"##,
+                    shell.display(),
+                    machines.display(),
+                    local_roster.display(),
+                    remote_roster.display(),
+                    log.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&command, fs::Permissions::from_mode(0o700)).unwrap();
+            let client = Herdr::new(Agents {
+                herdr_command: command.to_string_lossy().into_owned(),
+                ..Agents::default()
+            });
+            Self {
+                _directory: directory,
+                client,
+                machines,
+                remote_roster,
+                log,
+            }
+        }
+        fn inputs(&self) -> Vec<String> {
+            fs::read(&self.log)
+                .unwrap_or_default()
+                .split(|b| *b == 0)
+                .filter(|b| !b.is_empty())
+                .map(|b| String::from_utf8(b.to_vec()).unwrap())
+                .collect()
+        }
+        fn change_machine(&self, key: &str, value: Value) {
+            let mut machines: Value =
+                serde_json::from_str(&fs::read_to_string(&self.machines).unwrap()).unwrap();
+            machines[0][key] = value;
+            fs::write(&self.machines, machines.to_string()).unwrap();
+        }
+    }
+    #[tokio::test]
+    async fn remote_ids_captures_and_input_never_cross_machine_boundaries() {
+        let f = MachineFixture::new();
+        let agents = f.client.poll().await.unwrap();
+        assert_eq!(agents.len(), 3); // Local + two enabled, reachable remotes.
+        let local = agents.iter().find(|a| a.name == "w1:p1").unwrap();
+        let remote = agents
+            .iter()
+            .find(|a| a.name == "remote:one:w1:p1")
+            .unwrap();
+        let second = agents
+            .iter()
+            .find(|a| a.name == "remote:two:w1:p1")
+            .unwrap();
+        assert_ne!(local.instance_id, remote.instance_id);
+        assert_ne!(remote.instance_id, second.instance_id);
+        assert_eq!(remote.display_name, "demo @ Lab");
+        assert_eq!(f.client.read(&local.name).await.unwrap(), "local screen");
+        assert_eq!(f.client.read(&remote.name).await.unwrap(), "one screen");
+        assert_eq!(f.client.read(&second.name).await.unwrap(), "two screen");
+        let capture = f.client.capture(&remote.name).await.unwrap();
+        f.client.mark_detection(&capture, Route::Ignore).await;
+        f.client
+            .command(remote, "prompt", json!({"text":"Remote task"}))
+            .await
+            .unwrap();
+        assert_eq!(
+            f.inputs(),
+            [
+                "--machine",
+                "one",
+                "agent",
+                "prompt",
+                "w1:p1",
+                "Remote task"
+            ]
+        );
+        fs::remove_file(&f.log).unwrap();
+        f.client.command(local, "cancel", json!({})).await.unwrap();
+        assert_eq!(
+            f.inputs(),
+            [
+                "--session",
+                "local",
+                "agent",
+                "send-keys",
+                "w1:p1",
+                "ctrl+c"
+            ]
+        );
+    }
+    #[tokio::test]
+    async fn disabled_retargeted_and_unreachable_machines_cannot_receive_stale_input() {
+        let f = MachineFixture::new();
+        let remote = f
+            .client
+            .poll()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|a| a.name == "remote:one:w1:p1")
+            .unwrap();
+        let capture = f.client.capture(&remote.name).await.unwrap();
+        let question = Question {
+            question_id: "q".into(),
+            question_kind: "question".into(),
+            title: "Question".into(),
+            body: "Choose?".into(),
+            options: vec![],
+            multiple: false,
+            allow_custom: true,
+        };
+        f.client.store(&capture, question, json!({}), true).await;
+        assert!(f.client.question(&remote.name).await.is_some());
+        f.change_machine("target", json!("user@replacement"));
+        assert_ne!(
+            f.client
+                .capture(&remote.name)
+                .await
+                .unwrap()
+                .agent
+                .instance_id,
+            remote.instance_id
+        );
+        assert!(f
+            .client
+            .command(&remote, "cancel", json!({}))
+            .await
+            .is_err());
+        // Also cover a retarget between the final screen check and input resolution.
+        assert!(f
+            .client
+            .input(&remote, &["agent", "send-keys", &remote.name, "ctrl+c"])
+            .await
+            .is_err());
+        assert!(f.client.question(&remote.name).await.is_none());
+        assert!(f.inputs().is_empty());
+        f.change_machine("target", json!("user@lab"));
+        f.change_machine("session", json!("replacement-session"));
+        assert!(f
+            .client
+            .command(&remote, "cancel", json!({}))
+            .await
+            .is_err());
+        f.change_machine("session", json!("work"));
+        f.change_machine("enabled", json!(false));
+        assert_eq!(f.client.poll().await.unwrap().len(), 2);
+        assert!(f
+            .client
+            .command(&remote, "cancel", json!({}))
+            .await
+            .is_err());
+        assert!(f.inputs().is_empty());
+        f.change_machine("enabled", json!(true));
+        fs::write(&f.remote_roster, "{}").unwrap();
+        assert_eq!(f.client.poll().await.unwrap().len(), 1); // Local survives both remote failures.
+        assert!(f.client.questions().await.is_empty());
+        assert!(f
+            .client
+            .command(&remote, "cancel", json!({}))
+            .await
+            .is_err());
+        assert!(f.inputs().is_empty());
+    }
+    #[tokio::test]
+    async fn local_only_mode_does_not_discover_or_deliver_to_remote_machines() {
+        let mut f = MachineFixture::new();
+        f.client.settings.discover_remote = false;
+        assert_eq!(f.client.poll().await.unwrap().len(), 1);
+        assert!(f.client.capture("remote:one:w1:p1").await.is_err());
+        assert!(f.inputs().is_empty());
+    }
+    #[test]
+    fn agents_sharing_a_project_use_readable_titles_instead_of_pane_suffixes() {
+        let mut value = roster("first", "idle");
+        value["result"]["agents"][0]["terminal_title_stripped"] = json!("Inspect docs | demo");
+        let mut second = value["result"]["agents"][0].clone();
+        second["pane_id"] = json!("w2:p1");
+        second["terminal_id"] = json!("second");
+        second["terminal_title_stripped"] = json!("Check tests | demo");
+        value["result"]["agents"]
+            .as_array_mut()
+            .unwrap()
+            .push(second);
+        let names: Vec<_> = parse_roster(&value, "default")
+            .unwrap()
+            .into_iter()
+            .map(|a| a.display_name)
+            .collect();
+        assert_eq!(names, ["demo: Inspect docs", "demo: Check tests"]);
+    }
+    #[tokio::test]
+    #[ignore = "reads enabled saved remote machines through the installed CLI; never sends input"]
+    async fn installed_cli_discovers_remote_agents_and_reads_their_captures() {
+        let client = Herdr::new(Agents {
+            herdr_command: std::env::var("ORCHRD_TEST_HERDR").expect("set ORCHRD_TEST_HERDR"),
+            ..Agents::default()
+        });
+        let agents = client.poll().await.unwrap();
+        let remotes: Vec<_> = agents
+            .iter()
+            .filter(|a| a.name.starts_with("remote:"))
+            .collect();
+        assert!(
+            !remotes.is_empty(),
+            "requires a saved enabled machine with a running agent"
+        );
+        for agent in remotes {
+            let capture = client.capture(&agent.name).await.unwrap();
+            assert_eq!(capture.agent.instance_id, agent.instance_id);
+            assert!(!capture.screen.trim().is_empty());
+        }
+    }
+
     #[test]
     fn identity_uses_terminal_instance_and_session_rather_than_agent_brand() {
         let agents = parse_roster(&roster("t1", "blocked"), "default").unwrap();
         assert_eq!(agents[0].name, "w1:p1");
-        assert_eq!(agents[0].display_name, "demo (w1:p1)");
+        assert_eq!(agents[0].display_name, "demo");
         assert_ne!(
             agents[0].instance_id,
             parse_roster(&roster("t2", "blocked"), "default").unwrap()[0].instance_id
@@ -849,7 +1306,7 @@ mod tests {
             .map(|path| path.join("bash"))
             .find(|path| path.is_file())
             .expect("bash in test PATH");
-        fs::write(
+        install_script(
             &command,
             format!(
                 "#!{}\ncase \"$4\" in\nlist) cat '{}' ;;\nread) cat '{}' ;;\n*) exit 99 ;;\nesac\n",
@@ -862,6 +1319,7 @@ mod tests {
         fs::set_permissions(&command, fs::Permissions::from_mode(0o700)).unwrap();
         let client = Herdr::new(Agents {
             herdr_command: command.to_string_lossy().into_owned(),
+            discover_remote: false,
             ..Agents::default()
         });
         assert_eq!(client.poll().await.unwrap().len(), 1);

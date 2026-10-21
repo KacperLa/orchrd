@@ -1,6 +1,4 @@
 pub mod agent;
-pub mod agent_bridge;
-mod agents;
 pub mod config;
 pub mod controller;
 mod coordinator;

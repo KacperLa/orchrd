@@ -13,18 +13,6 @@ pub struct ConversationMessage {
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseJob {
-    pub id: String,
-    pub session: String,
-    pub epoch: String,
-    pub agent_name: String,
-    pub instance_id: String,
-    pub kind: String,
-    pub output: String,
-    pub speech: Option<String>,
-}
-
 pub struct Database {
     conn: Mutex<Connection>,
 }
@@ -36,20 +24,17 @@ impl Database {
         }
         let mut conn =
             Connection::open(path).with_context(|| format!("open {}", path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS conversation_messages(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,role TEXT NOT NULL,content TEXT NOT NULL,
                 agent_name TEXT,kind TEXT NOT NULL,created_at TEXT NOT NULL,
                 session TEXT NOT NULL DEFAULT '');
-            CREATE TABLE IF NOT EXISTS response_jobs(
-                id TEXT PRIMARY KEY,session TEXT NOT NULL,epoch TEXT NOT NULL,agent_name TEXT NOT NULL,
-                instance_id TEXT NOT NULL,kind TEXT NOT NULL,output TEXT NOT NULL,speech TEXT,
-                created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS deliveries(
                 id TEXT PRIMARY KEY,session TEXT NOT NULL,agent_name TEXT NOT NULL,
-                request TEXT NOT NULL,result TEXT,created_at TEXT NOT NULL);
-            CREATE INDEX IF NOT EXISTS response_pending ON response_jobs(created_at) WHERE speech IS NULL;")?;
+                request TEXT NOT NULL,result TEXT,created_at TEXT NOT NULL);",
+        )?;
         // Preserve history from existing installations. Former run/binding tables
         // are archival data only; live status is never loaded from SQLite.
         let columns = {
@@ -72,22 +57,8 @@ impl Database {
                 [],
             )?;
         }
-        let response_columns = {
-            let mut stmt = tx.prepare("PRAGMA table_info(response_jobs)")?;
-            let rows = stmt
-                .query_map([], |r| r.get::<_, String>(1))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            rows
-        };
-        if response_columns.iter().any(|c| c == "pane_id") {
-            tx.execute(
-                "ALTER TABLE response_jobs RENAME COLUMN pane_id TO instance_id",
-                [],
-            )?;
-        }
         tx.execute_batch(
             "UPDATE conversation_messages SET session='toad' WHERE session LIKE 'toad:%';
-            UPDATE response_jobs SET session='toad' WHERE session LIKE 'toad:%';
             UPDATE deliveries SET session='toad' WHERE session LIKE 'toad:%';
             DELETE FROM settings WHERE key IN ('selected_session','selected_herdr_session');",
         )?;
@@ -172,54 +143,6 @@ impl Database {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     }
-    pub fn capture(&self, job: &ResponseJob) -> Result<()> {
-        self.conn.lock().unwrap().execute("INSERT OR IGNORE INTO response_jobs
-            (id,session,epoch,agent_name,instance_id,kind,output,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
-            params![job.id,job.session,job.epoch,job.agent_name,job.instance_id,job.kind,job.output,Utc::now().to_rfc3339()])?;
-        Ok(())
-    }
-    pub fn next_response(&self) -> Result<Option<ResponseJob>> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn
-            .query_row(
-                "SELECT id,session,epoch,agent_name,instance_id,kind,output,speech FROM response_jobs
-            WHERE speech IS NULL ORDER BY created_at,rowid LIMIT 1",
-                [],
-                response_row,
-            )
-            .optional()?)
-    }
-    pub fn finish_response(&self, job: &ResponseJob, speech: &str) -> Result<bool> {
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
-        let changed = tx.execute(
-            "UPDATE response_jobs SET speech=?2 WHERE id=?1 AND speech IS NULL",
-            params![job.id, speech],
-        )?;
-        if changed > 0 {
-            insert_message(
-                &tx,
-                &job.session,
-                "assistant",
-                Some(&job.agent_name),
-                &job.kind,
-                speech,
-            )?;
-        }
-        tx.commit()?;
-        Ok(changed > 0)
-    }
-    pub fn latest_response(&self, session: &str, agent: &str) -> Result<Option<ResponseJob>> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn
-            .query_row(
-                "SELECT id,session,epoch,agent_name,instance_id,kind,output,speech FROM response_jobs
-            WHERE session=?1 AND agent_name=?2 ORDER BY created_at DESC,rowid DESC LIMIT 1",
-                params![session, agent],
-                response_row,
-            )
-            .optional()?)
-    }
     pub fn begin_delivery(
         &self,
         id: &str,
@@ -275,19 +198,6 @@ fn insert_message(
     )?;
     Ok(())
 }
-fn response_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ResponseJob> {
-    Ok(ResponseJob {
-        id: r.get(0)?,
-        session: r.get(1)?,
-        epoch: r.get(2)?,
-        agent_name: r.get(3)?,
-        instance_id: r.get(4)?,
-        kind: r.get(5)?,
-        output: r.get(6)?,
-        speech: r.get(7)?,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,37 +219,20 @@ mod tests {
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].content, "Keep this");
         assert_eq!(history[1].content, "Other agent");
-        assert_eq!(db.next_response().unwrap().unwrap().instance_id, "instance");
-        assert_eq!(db.next_response().unwrap().unwrap().session, "toad");
+        // Legacy bridge jobs are archival only and cannot feed the controller.
+        let pending: i64 = db
+            .conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM response_jobs WHERE speech IS NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending, 1);
         assert!(db.setting("selected_session").unwrap().is_none());
         assert!(db.setting("selected_herdr_session").unwrap().is_none());
-    }
-    #[test]
-    fn response_queue_and_history_survive_restart_without_duplicates() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("history.sqlite");
-        let db = Database::open(&path).unwrap();
-        let job = ResponseJob {
-            id: "one".into(),
-            session: "work".into(),
-            epoch: "epoch".into(),
-            agent_name: "agent".into(),
-            instance_id: "pane".into(),
-            kind: "agent_response".into(),
-            output: "Tests passed".into(),
-            speech: None,
-        };
-        db.capture(&job).unwrap();
-        db.capture(&job).unwrap();
-        drop(db);
-        let db = Database::open(&path).unwrap();
-        assert_eq!(db.next_response().unwrap().unwrap().output, "Tests passed");
-        assert!(db.finish_response(&job, "The tests passed.").unwrap());
-        assert!(!db.finish_response(&job, "Duplicate").unwrap());
-        assert!(db.next_response().unwrap().is_none());
-        assert_eq!(db.history("work", 20).unwrap().len(), 1);
-        assert!(db.history("other", 20).unwrap().is_empty());
-        assert!(db.latest_response("other", "agent").unwrap().is_none());
     }
     #[test]
     fn interrupted_delivery_is_recorded_once_as_uncertain() {

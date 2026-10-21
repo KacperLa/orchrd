@@ -21,27 +21,19 @@ pub struct Config {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Agents {
-    pub backend: AgentBackend,
     pub herdr_command: String,
     pub herdr_session: String,
+    pub discover_remote: bool,
     pub screen_lines: usize,
     pub poll_seconds: u64,
-}
-
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentBackend {
-    #[default]
-    Bridge,
-    Herdr,
 }
 
 impl Default for Agents {
     fn default() -> Self {
         Self {
-            backend: AgentBackend::Bridge,
             herdr_command: "herdr".into(),
             herdr_session: "default".into(),
+            discover_remote: true,
             screen_lines: 30,
             poll_seconds: 2,
         }
@@ -480,10 +472,10 @@ mod tests {
         config.validate().unwrap();
     }
     #[test]
-    fn herdr_is_opt_in_and_observation_limits_are_validated() {
-        assert_eq!(Config::default().agents.backend, AgentBackend::Bridge);
-        let agents: Agents = toml::from_str("backend = 'herdr'").unwrap();
-        assert_eq!(agents.backend, AgentBackend::Herdr);
+    fn herdr_defaults_and_observation_limits_are_validated() {
+        let agents = Config::default().agents;
+        assert_eq!(agents.herdr_command, "herdr");
+        assert!(agents.discover_remote);
         assert_eq!(agents.screen_lines, 30);
         for (lines, seconds) in [(0, 2), (201, 2), (30, 0), (30, 61)] {
             let mut config = configured();
@@ -491,7 +483,9 @@ mod tests {
             config.agents.poll_seconds = seconds;
             assert!(config.validate().is_err());
         }
-        assert!(toml::from_str::<Agents>("backend = 'typo'").is_err());
+        for backend in ["bridge", "herdr"] {
+            assert!(toml::from_str::<Agents>(&format!("backend = '{backend}'")).is_err());
+        }
     }
 
     #[test]

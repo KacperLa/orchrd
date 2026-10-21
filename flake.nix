@@ -59,7 +59,6 @@
         };
         pythonEnv = pkgs.python3.withPackages (_: [ pocket-tts ]);
         activityPython = pkgs.python3.withPackages (p: [ p.pygobject3 p.pycairo ]);
-        bridgePython = pkgs.python3.withPackages (p: [ p.websockets ]);
         activityTypelibs = pkgs.lib.makeSearchPath "lib/girepository-1.0" (map pkgs.lib.getLib [ pkgs.gtk4 pkgs.pango pkgs.harfbuzz pkgs.gdk-pixbuf pkgs.graphene pkgs.glib pkgs.gobject-introspection ]);
         callgraphTool = pkgs.rustPlatform.buildRustPackage {
           pname = "cargo-callgraph";
@@ -107,7 +106,6 @@
           postCheck = ''
             gjs extension/test-lifecycle.js
             python3 -m unittest discover -s tts
-            ${bridgePython}/bin/python -m unittest discover -s adapters
             env -u GIO_EXTRA_MODULES -u GIO_MODULE_DIR GI_TYPELIB_PATH="${activityTypelibs}" GDK_BACKEND=x11 \
               XDG_DATA_DIRS="${pkgs.gtk4}/share" GTK_A11Y=none GIO_USE_VFS=local GTK_USE_PORTAL=0 \
               xvfb-run -a dbus-run-session --config-file=ui/test-bus.conf -- ${activityPython}/bin/python -m unittest discover -s ui
@@ -116,9 +114,6 @@
             wrapProgram $out/bin/orchrdd \
               --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.pipewire ]}
             install -d $out/libexec/orchrd
-            install -m755 adapters/codex_bridge.py $out/libexec/orchrd/codex_bridge.py
-            makeWrapper ${bridgePython}/bin/python $out/bin/orchrd-codex \
-              --add-flags "$out/libexec/orchrd/codex_bridge.py"
             install -m755 ui/orchrd_activity.py ui/orchrd_activity_render.py $out/libexec/orchrd/
             makeWrapper ${activityPython}/bin/python $out/bin/orchrd-activity \
               --add-flags "$out/libexec/orchrd/orchrd_activity.py" \
@@ -157,7 +152,6 @@
         devShells.default = pkgs.mkShell {
           GI_TYPELIB_PATH = activityTypelibs;
           ORCHRD_TEST_PYTHON = "${activityPython}/bin/python";
-          ORCHRD_BRIDGE_PYTHON = "${bridgePython}/bin/python";
           ORCHRD_TEST_GTK_DATA = "${pkgs.gtk4}/share";
           inputsFrom = [ orchrd ];
           packages = [

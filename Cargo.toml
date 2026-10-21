@@ -9,10 +9,6 @@ name = "orchrd"
 path = "src/lib.rs"
 
 [[bin]]
-name = "orchrd"
-path = "src/bin/orchrd.rs"
-
-[[bin]]
 name = "orchrdd"
 path = "src/bin/orchrdd.rs"
 

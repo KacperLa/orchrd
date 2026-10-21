@@ -8,13 +8,6 @@ self:
 let
   cfg = config.services.orchrd;
   servicePath = "%h/.nix-profile/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-  codexSocket =
-    if cfg.codexSocket != null then
-      cfg.codexSocket
-    else if cfg.startCodexServer then
-      "%t/orchrd-codex/server.sock"
-    else
-      "${config.home.homeDirectory}/.codex/app-server-control/app-server-control.sock";
 in
 {
   options.services.orchrd = import ./service-options.nix {
@@ -25,61 +18,6 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
-    home.sessionVariables = lib.mkIf (cfg.enableCodex || cfg.startCodexServer) {
-      ORCHRD_CODEX_SOCKET = codexSocket;
-      ORCHRD_CODEX_COMMAND = cfg.codexCommand;
-    };
-
-    systemd.user.services.orchrd-codex-server = lib.mkIf cfg.startCodexServer {
-      Unit = {
-        Description = "Shared local Codex app server for Orchard and the terminal";
-        PartOf = [ "graphical-session.target" ];
-      };
-      Service = {
-        Type = "simple";
-        ExecStart = "${pkgs.writeShellScript "orchrd-codex-server" ''
-          exec ${
-            lib.escapeShellArgs [
-              cfg.codexCommand
-              "app-server"
-              "--listen"
-            ]
-          } "unix://$ORCHRD_CODEX_SOCKET"
-        ''}";
-        RuntimeDirectory = "orchrd-codex";
-        RuntimeDirectoryMode = "0700";
-        UMask = "0077";
-        Environment = [
-          "PATH=${servicePath}"
-          "ORCHRD_CODEX_SOCKET=${codexSocket}"
-        ];
-        Restart = "on-failure";
-        RestartSec = 5;
-      };
-      Install.WantedBy = [ "graphical-session.target" ];
-    };
-
-    systemd.user.services.orchrd-codex = lib.mkIf cfg.enableCodex {
-      Unit = {
-        Description = "Orchrd bridge to shared Codex sessions";
-        After = [ "orchrd.service" ] ++ lib.optional cfg.startCodexServer "orchrd-codex-server.service";
-        Wants = lib.optional cfg.startCodexServer "orchrd-codex-server.service";
-        PartOf = [ "graphical-session.target" ];
-      };
-      Service = {
-        Type = "simple";
-        ExecStart = lib.escapeShellArgs [
-          "${cfg.package}/bin/orchrd-codex"
-          "--codex-socket"
-          codexSocket
-        ];
-        Environment = [ "PATH=${servicePath}" ];
-        Restart = "on-failure";
-        RestartSec = 5;
-      };
-      Install.WantedBy = [ "graphical-session.target" ];
-    };
-
     systemd.user.services.orchrd-tts = lib.mkIf cfg.enablePocketTts {
       Unit = {
         Description = "Orchrd Pocket TTS worker";

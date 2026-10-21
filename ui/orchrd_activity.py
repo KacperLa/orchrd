@@ -42,10 +42,7 @@ def lane_label(snapshot, identifier):
     agent = next((a for a in agents if a["agent_name"] == identifier), None)
     if agent is None:
         return identifier
-    title = agent.get("display_name") or identifier
-    if sum((a.get("display_name") or a["agent_name"]) == title for a in agents) > 1:
-        return f"{title} ({identifier})"
-    return title
+    return agent.get("display_name") or identifier
 
 class ActivityWindow(Gtk.ApplicationWindow):
     def __init__(self, app):

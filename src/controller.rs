@@ -1,10 +1,10 @@
 use crate::activity::Activity;
 pub use crate::coordinator::{Event, Scope, Snapshot};
 use crate::{
-    agents::Agents,
     config::{AnnouncementMode, Config},
     coordinator::{Coordinator, Message, OperationKind, Speech},
     db::Database,
+    herdr::Herdr,
     intent::{redact, IntentClient, ToolCall},
     routing::{Operation, Router},
     stt::SttClient,
@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::{broadcast, mpsc, oneshot, watch, Mutex, Notify},
+    sync::{broadcast, mpsc, oneshot, watch, Mutex},
     task::JoinSet,
     time::{sleep, timeout},
 };
@@ -44,8 +44,7 @@ struct Runtime {
 }
 pub struct Controller {
     pub config: Arc<Config>,
-    db: Arc<Database>,
-    agents: Agents,
+    agents: Herdr,
     intent: IntentClient,
     router: Router,
     tts: TtsClient,
@@ -54,7 +53,6 @@ pub struct Controller {
     turns: mpsc::Sender<Turn>,
     snapshots: watch::Receiver<Snapshot>,
     events: broadcast::Sender<Event>,
-    summaries: Arc<Notify>,
     recording: Mutex<Option<Recording>>,
     runtime: Mutex<Option<Runtime>>,
 }
@@ -80,28 +78,18 @@ impl Controller {
         let (messages, messages_rx) = mpsc::channel(256);
         let (turns, turns_rx) = mpsc::channel(16);
         let (speech, speech_rx) = mpsc::channel(32);
-        let summaries = Arc::new(Notify::new());
-        let coordinator = Coordinator::new(
-            snapshot,
-            db.clone(),
-            events.clone(),
-            snapshots_tx,
-            speech,
-            summaries.clone(),
-        );
+        let coordinator = Coordinator::new(snapshot, db, events.clone(), snapshots_tx, speech);
         Ok(Arc::new(Self {
-            agents: Agents::new(&config),
+            agents: Herdr::new(config.agents.clone()),
             intent: IntentClient::new(&config)?,
             router: Router::new(&config.routing)?,
             tts: TtsClient::from_config(&config)?,
             stt: SttClient::new(&config)?,
             config: Arc::new(config),
-            db,
             messages,
             turns,
             snapshots,
             events,
-            summaries,
             recording: Mutex::new(None),
             runtime: Mutex::new(Some(Runtime {
                 coordinator,
@@ -349,17 +337,11 @@ impl Controller {
             .context("controller already running")?;
         let mut tasks = JoinSet::new();
         tasks.spawn(runtime.coordinator.run(runtime.messages));
-        let agents = self.agents.clone();
-        let bridge_messages = self.messages.clone();
-        tasks.spawn(async move { agents.serve(bridge_messages).await });
         tasks.spawn(self.clone().poll_worker());
-        if self.agents.herdr().is_some() {
-            // Keep slow extraction separate from status/voice processing.
-            for _ in 0..2 {
-                tasks.spawn(self.clone().dialog_worker());
-            }
+        // Keep slow extraction separate from status/voice processing.
+        for _ in 0..2 {
+            tasks.spawn(self.clone().dialog_worker());
         }
-        tasks.spawn(self.clone().summary_worker());
         tasks.spawn(self.clone().conversation_worker(runtime.turns));
         tasks.spawn(Self::speech_worker(
             self.tts.clone(),
@@ -377,7 +359,7 @@ impl Controller {
     async fn poll_worker(self: Arc<Self>) -> Result<()> {
         loop {
             let scope = self.snapshots.borrow().scope.clone();
-            let agents = match self.agents.snapshot().await {
+            let agents = match self.agents.poll().await {
                 Ok(agents) => agents,
                 Err(error) => {
                     tracing::warn!(%error, "agent observation unavailable");
@@ -395,22 +377,15 @@ impl Controller {
                 }
             };
             self.send(Message::Polled { scope, agents }).await?;
-            if let Some(herdr) = self.agents.herdr() {
-                let scope = self.snapshots.borrow().scope.clone();
-                let questions = herdr.questions().await;
-                self.send(Message::ObservedQuestions { scope, questions })
-                    .await?;
-            }
-            sleep(if self.agents.herdr().is_some() {
-                Duration::from_secs(self.config.agents.poll_seconds)
-            } else {
-                Duration::from_millis(200)
-            })
-            .await;
+            let scope = self.snapshots.borrow().scope.clone();
+            let questions = self.agents.questions().await;
+            self.send(Message::ObservedQuestions { scope, questions })
+                .await?;
+            sleep(Duration::from_secs(self.config.agents.poll_seconds)).await;
         }
     }
     async fn dialog_worker(self: Arc<Self>) -> Result<()> {
-        let herdr = self.agents.herdr().context("Herdr backend is disabled")?;
+        let herdr = &self.agents;
         loop {
             let Some(capture) = herdr.next().await else {
                 sleep(Duration::from_millis(250)).await;
@@ -474,99 +449,8 @@ impl Controller {
     }
 
     pub async fn rescan_questions(&self) -> Result<()> {
-        let herdr = self
-            .agents
-            .herdr()
-            .context("Rescanning is available with the Herdr backend")?;
-        herdr.retry().await;
+        self.agents.retry().await;
         Ok(())
-    }
-    async fn summary_worker(self: Arc<Self>) -> Result<()> {
-        loop {
-            // Create the notification future before querying, avoiding a lost wakeup.
-            let notified = self.summaries.notified();
-            let Some(job) = self.db.next_response()? else {
-                notified.await;
-                continue;
-            };
-            let mut summary = None;
-            let scope = Scope {
-                session: job.session.clone(),
-                epoch: job.epoch.clone(),
-            };
-            self.trace(
-                &scope,
-                Activity::new(&job.id, "summary", "summarizing", false, json!({})),
-            )?;
-            let display_name = self
-                .snapshots
-                .borrow()
-                .agents
-                .iter()
-                .find(|agent| agent.name == job.agent_name)
-                .map(|agent| agent.display_name.clone())
-                .unwrap_or_else(|| job.agent_name.clone());
-            if !job.output.trim().is_empty() {
-                for attempt in 0..2 {
-                    let result = if job.kind == "agent_question"
-                        && serde_json::from_str::<crate::question::Question>(&job.output)
-                            .is_ok_and(|q| q.question_kind == "question")
-                    {
-                        Ok(
-                            serde_json::from_str::<crate::question::Question>(&job.output)?
-                                .speech(),
-                        )
-                    } else if job.kind == "agent_question" {
-                        self.intent
-                            .describe_blocker(&display_name, &job.output)
-                            .await
-                    } else {
-                        self.intent.summarize(&display_name, &job.output).await
-                    };
-                    match result {
-                        Ok(speech) => {
-                            summary = Some(speech);
-                            break;
-                        }
-                        Err(error) => {
-                            self.trace(
-                                &scope,
-                                Activity::new(
-                                    &job.id,
-                                    "summary",
-                                    "retrying",
-                                    false,
-                                    json!({"error":error.to_string(),"attempt":attempt+1}),
-                                ),
-                            )?;
-                            tracing::warn!(id=%job.id,%error,attempt,"summary failed");
-                            if attempt == 0 {
-                                sleep(Duration::from_secs(1)).await;
-                            }
-                        }
-                    }
-                }
-            }
-            let fallback = summary.is_none();
-            let speech = summary.unwrap_or_else(|| {
-                format!(
-                    "{} has new output, but I couldn't summarize it. Open the agent window for details.",
-                    display_name
-                )
-            });
-            self.trace(
-                &scope,
-                Activity::new(
-                    &job.id,
-                    "summary",
-                    "persisting",
-                    false,
-                    json!({"speech":speech,"fallback":fallback}),
-                ),
-            )?;
-            self.ask(|reply| Message::Summarized { job, speech, reply })
-                .await?;
-        }
     }
     async fn conversation_worker(self: Arc<Self>, mut turns: mpsc::Receiver<Turn>) -> Result<()> {
         while let Some(turn) = turns.recv().await {
@@ -627,7 +511,7 @@ impl Controller {
                 &text,
                 &context.agents,
                 context.active_agent.as_deref(),
-                self.agents.questions().await,
+                self.agents.routing_questions().await,
             )
             .await?;
         self.trace(
@@ -814,23 +698,21 @@ impl Controller {
             }
         };
         if decision.operation == Operation::ReadAgent {
-            if let Some(herdr) = self.agents.herdr() {
-                let questions = herdr.questions().await;
-                self.send(Message::ObservedQuestions {
+            let questions = self.agents.questions().await;
+            self.send(Message::ObservedQuestions {
+                scope: turn.scope.clone(),
+                questions,
+            })
+            .await?;
+            if self
+                .ask(|reply| Message::ReadObservedQuestion {
                     scope: turn.scope.clone(),
-                    questions,
+                    agent_name: agent.name.clone(),
+                    reply,
                 })
-                .await?;
-                if self
-                    .ask(|reply| Message::ReadObservedQuestion {
-                        scope: turn.scope.clone(),
-                        agent_name: agent.name.clone(),
-                        reply,
-                    })
-                    .await?
-                {
-                    return Ok(());
-                }
+                .await?
+            {
+                return Ok(());
             }
             self.record(
                 &turn.scope,
@@ -887,11 +769,10 @@ impl Controller {
         if call.arguments["expected_instance_id"]
             .as_str()
             .is_some_and(|id| id != agent.instance_id)
-            || (self.agents.herdr().is_some()
-                && call
-                    .arguments
-                    .get("expected_state_change_seq")
-                    .is_some_and(|seq| *seq != json!(agent.state_change_seq)))
+            || call
+                .arguments
+                .get("expected_state_change_seq")
+                .is_some_and(|seq| *seq != json!(agent.state_change_seq))
         {
             bail!("The selected agent changed while routing; please try again")
         }
@@ -903,21 +784,17 @@ impl Controller {
                 .linked(None, Some(agent.name.clone())),
         )?;
         match call.name.as_str() {
-            "read_agent" | "latest_result" => {
-                let result = if let Some(reason) =
-                    pending_read_reason(agent, sent_agents, call.name == "latest_result")
-                {
+            "read_agent" => {
+                let result = if let Some(reason) = pending_read_reason(agent, sent_agents) {
                     json!({"agent_id":name,"status":"pending","reason":reason,
                         "message":"A fresh response is not available yet. Do not present an earlier result as this request's answer."})
-                } else if call.name == "read_agent" {
+                } else {
                     let lines = call.arguments["lines"]
                         .as_u64()
                         .unwrap_or(100)
                         .clamp(10, 300) as usize;
                     let output = self.agents.read(name).await?;
                     json!({"agent_id":name,"status":agent.status,"output":output.chars().rev().take(lines * 120).collect::<String>().chars().rev().collect::<String>()})
-                } else {
-                    serde_json::to_value(self.db.latest_response(&scope.session, name)?)?
                 };
                 self.ask(|reply| Message::Addressed {
                     scope: scope.clone(),
@@ -1121,14 +998,9 @@ fn permission_for_turn<'a>(
 fn pending_read_reason(
     agent: &crate::agent::AgentInfo,
     sent_agents: &HashSet<String>,
-    latest_result: bool,
 ) -> Option<&'static str> {
     if sent_agents.contains(&agent.name) {
         Some("sent_in_current_turn")
-    } else if latest_result && agent.status == "working" {
-        Some("agent_working")
-    } else if latest_result && agent.status == "blocked" {
-        Some("agent_blocked")
     } else {
         None
     }
@@ -1164,32 +1036,21 @@ mod readback_tests {
         let mut sent = HashSet::new();
         sent.insert("coder".into());
         assert_eq!(
-            pending_read_reason(&agent, &sent, true),
-            Some("sent_in_current_turn")
-        );
-        assert_eq!(
-            pending_read_reason(&agent, &sent, false),
+            pending_read_reason(&agent, &sent),
             Some("sent_in_current_turn")
         );
         sent.clear();
-        assert_eq!(pending_read_reason(&agent, &sent, true), None);
+        assert_eq!(pending_read_reason(&agent, &sent), None);
         let working = crate::agent::AgentInfo {
             status: "working".into(),
             ..agent
         };
-        assert_eq!(
-            pending_read_reason(&working, &sent, true),
-            Some("agent_working")
-        );
-        assert_eq!(pending_read_reason(&working, &sent, false), None);
+        assert_eq!(pending_read_reason(&working, &sent), None);
         let blocked = crate::agent::AgentInfo {
             status: "blocked".into(),
             ..working
         };
-        assert_eq!(
-            pending_read_reason(&blocked, &sent, true),
-            Some("agent_blocked")
-        );
+        assert_eq!(pending_read_reason(&blocked, &sent), None);
     }
 }
 fn string_arg<'a>(value: &'a Value, key: &str) -> Result<&'a str> {

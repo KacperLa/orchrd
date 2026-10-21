@@ -1,37 +1,13 @@
 {
   "nodes": [
     {
-      "id": "AsyncBufRead::consume@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/io/async_buf_read.rs:61",
-      "name": "consume",
-      "qualified_path": "AsyncBufRead::consume",
-      "crate_name": "tokio",
-      "module": [],
-      "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/io/async_buf_read.rs",
-      "line": 61,
-      "col": 7,
-      "is_workspace": false,
-      "is_trait_method": false
-    },
-    {
-      "id": "Bridge@/home/kacper/Documents/Projects/orchrd/src/agents.rs:15",
-      "name": "Bridge",
-      "qualified_path": "Bridge",
-      "crate_name": "orchrd",
-      "module": [],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 15,
-      "col": 4,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "Error@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:68",
+      "id": "Error@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:63",
       "name": "Error",
       "qualified_path": "Error",
       "crate_name": "orchrd",
       "module": [],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 68,
+      "line": 63,
       "col": 4,
       "is_workspace": true,
       "is_trait_method": false
@@ -46,18 +22,6 @@
       "line": 834,
       "col": 4,
       "is_workspace": false,
-      "is_trait_method": false
-    },
-    {
-      "id": "Herdr@/home/kacper/Documents/Projects/orchrd/src/agents.rs:16",
-      "name": "Herdr",
-      "qualified_path": "Herdr",
-      "crate_name": "orchrd",
-      "module": [],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 16,
-      "col": 4,
-      "is_workspace": true,
       "is_trait_method": false
     },
     {
@@ -109,13 +73,25 @@
       "is_trait_method": false
     },
     {
-      "id": "Snapshot@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:64",
+      "id": "Remote@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:45",
+      "name": "Remote",
+      "qualified_path": "Remote",
+      "crate_name": "orchrd",
+      "module": [],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 45,
+      "col": 4,
+      "is_workspace": true,
+      "is_trait_method": false
+    },
+    {
+      "id": "Snapshot@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:59",
       "name": "Snapshot",
       "qualified_path": "Snapshot",
       "crate_name": "orchrd",
       "module": [],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 64,
+      "line": 59,
       "col": 4,
       "is_workspace": true,
       "is_trait_method": false
@@ -133,13 +109,13 @@
       "is_trait_method": false
     },
     {
-      "id": "Transcript@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:65",
+      "id": "Transcript@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:60",
       "name": "Transcript",
       "qualified_path": "Transcript",
       "crate_name": "orchrd",
       "module": [],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 65,
+      "line": 60,
       "col": 4,
       "is_workspace": true,
       "is_trait_method": false
@@ -185,34 +161,6 @@
       "is_trait_method": false
     },
     {
-      "id": "agent_bridge::messages_scope@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:408",
-      "name": "messages_scope",
-      "qualified_path": "agent_bridge::messages_scope",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 408,
-      "col": 9,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "agent_bridge::read_frame@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:388",
-      "name": "read_frame",
-      "qualified_path": "agent_bridge::read_frame",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 388,
-      "col": 9,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
       "id": "answer_question@/home/kacper/Documents/Projects/orchrd/src/routing.rs:63",
       "name": "answer_question",
       "qualified_path": "answer_question",
@@ -227,7 +175,7 @@
       "is_trait_method": false
     },
     {
-      "id": "api_key@/home/kacper/Documents/Projects/orchrd/src/config.rs:269",
+      "id": "api_key@/home/kacper/Documents/Projects/orchrd/src/config.rs:261",
       "name": "api_key",
       "qualified_path": "api_key",
       "crate_name": "orchrd",
@@ -235,13 +183,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 269,
+      "line": 261,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "append@/home/kacper/Documents/Projects/orchrd/src/db.rs:138",
+      "id": "append@/home/kacper/Documents/Projects/orchrd/src/db.rs:109",
       "name": "append",
       "qualified_path": "append",
       "crate_name": "orchrd",
@@ -249,7 +197,7 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 138,
+      "line": 109,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -339,7 +287,7 @@
       "is_trait_method": false
     },
     {
-      "id": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "id": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "name": "ask",
       "qualified_path": "ask",
       "crate_name": "orchrd",
@@ -347,7 +295,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 134,
+      "line": 122,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -365,7 +313,7 @@
       "is_trait_method": false
     },
     {
-      "id": "begin_delivery@/home/kacper/Documents/Projects/orchrd/src/db.rs:222",
+      "id": "begin_delivery@/home/kacper/Documents/Projects/orchrd/src/db.rs:145",
       "name": "begin_delivery",
       "qualified_path": "begin_delivery",
       "crate_name": "orchrd",
@@ -373,7 +321,7 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 222,
+      "line": 145,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -503,7 +451,7 @@
       "is_trait_method": false
     },
     {
-      "id": "cancel_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:264",
+      "id": "cancel_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:252",
       "name": "cancel_listening",
       "qualified_path": "cancel_listening",
       "crate_name": "orchrd",
@@ -511,27 +459,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 264,
+      "line": 252,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "capture@/home/kacper/Documents/Projects/orchrd/src/db.rs:174",
-      "name": "capture",
-      "qualified_path": "capture",
-      "crate_name": "orchrd",
-      "module": [
-        "db"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 174,
-      "col": 11,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "capture@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:96",
+      "id": "capture@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:233",
       "name": "capture",
       "qualified_path": "capture",
       "crate_name": "orchrd",
@@ -539,13 +473,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 96,
+      "line": 233,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "check_scope@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:250",
+      "id": "check_scope@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:230",
       "name": "check_scope",
       "qualified_path": "check_scope",
       "crate_name": "orchrd",
@@ -553,7 +487,7 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 250,
+      "line": 230,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -573,35 +507,7 @@
       "is_trait_method": false
     },
     {
-      "id": "command@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:307",
-      "name": "command",
-      "qualified_path": "command",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 307,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "command@/home/kacper/Documents/Projects/orchrd/src/agents.rs:68",
-      "name": "command",
-      "qualified_path": "command",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 68,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:332",
+      "id": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:490",
       "name": "command",
       "qualified_path": "command",
       "crate_name": "orchrd",
@@ -609,27 +515,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 332,
+      "line": 490,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "command_with_timeout@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:311",
-      "name": "command_with_timeout",
-      "qualified_path": "command_with_timeout",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 311,
-      "col": 13,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "complete@/home/kacper/Documents/Projects/orchrd/src/intent.rs:112",
+      "id": "complete@/home/kacper/Documents/Projects/orchrd/src/intent.rs:101",
       "name": "complete",
       "qualified_path": "complete",
       "crate_name": "orchrd",
@@ -637,7 +529,7 @@
         "intent"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "line": 112,
+      "line": 101,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -655,7 +547,7 @@
       "is_trait_method": false
     },
     {
-      "id": "config::credential@/home/kacper/Documents/Projects/orchrd/src/config.rs:331",
+      "id": "config::credential@/home/kacper/Documents/Projects/orchrd/src/config.rs:323",
       "name": "credential",
       "qualified_path": "config::credential",
       "crate_name": "orchrd",
@@ -663,13 +555,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 331,
+      "line": 323,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "config::default_api_key_env@/home/kacper/Documents/Projects/orchrd/src/config.rs:224",
+      "id": "config::default_api_key_env@/home/kacper/Documents/Projects/orchrd/src/config.rs:216",
       "name": "default_api_key_env",
       "qualified_path": "config::default_api_key_env",
       "crate_name": "orchrd",
@@ -677,13 +569,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 224,
+      "line": 216,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "config::default_intent_timeout_seconds@/home/kacper/Documents/Projects/orchrd/src/config.rs:227",
+      "id": "config::default_intent_timeout_seconds@/home/kacper/Documents/Projects/orchrd/src/config.rs:219",
       "name": "default_intent_timeout_seconds",
       "qualified_path": "config::default_intent_timeout_seconds",
       "crate_name": "orchrd",
@@ -691,13 +583,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 227,
+      "line": 219,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "config::libc_getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:356",
+      "id": "config::libc_getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:348",
       "name": "libc_getuid",
       "qualified_path": "config::libc_getuid",
       "crate_name": "orchrd",
@@ -705,13 +597,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 356,
+      "line": 348,
       "col": 10,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "config::readable_asset@/home/kacper/Documents/Projects/orchrd/src/config.rs:344",
+      "id": "config::readable_asset@/home/kacper/Documents/Projects/orchrd/src/config.rs:336",
       "name": "readable_asset",
       "qualified_path": "config::readable_asset",
       "crate_name": "orchrd",
@@ -719,13 +611,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 344,
+      "line": 336,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "config::validate_env_name@/home/kacper/Documents/Projects/orchrd/src/config.rs:320",
+      "id": "config::validate_env_name@/home/kacper/Documents/Projects/orchrd/src/config.rs:312",
       "name": "validate_env_name",
       "qualified_path": "config::validate_env_name",
       "crate_name": "orchrd",
@@ -733,13 +625,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 320,
+      "line": 312,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "config::validate_url@/home/kacper/Documents/Projects/orchrd/src/config.rs:305",
+      "id": "config::validate_url@/home/kacper/Documents/Projects/orchrd/src/config.rs:297",
       "name": "validate_url",
       "qualified_path": "config::validate_url",
       "crate_name": "orchrd",
@@ -747,7 +639,7 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 305,
+      "line": 297,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
@@ -765,7 +657,7 @@
       "is_trait_method": false
     },
     {
-      "id": "context@/home/kacper/Documents/Projects/orchrd/src/controller.rs:139",
+      "id": "context@/home/kacper/Documents/Projects/orchrd/src/controller.rs:127",
       "name": "context",
       "qualified_path": "context",
       "crate_name": "orchrd",
@@ -773,13 +665,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 139,
+      "line": 127,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "controller::pending_read_reason@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1120",
+      "id": "controller::pending_read_reason@/home/kacper/Documents/Projects/orchrd/src/controller.rs:997",
       "name": "pending_read_reason",
       "qualified_path": "controller::pending_read_reason",
       "crate_name": "orchrd",
@@ -787,13 +679,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 1120,
+      "line": 997,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "controller::permission_for_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1106",
+      "id": "controller::permission_for_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:983",
       "name": "permission_for_turn",
       "qualified_path": "controller::permission_for_turn",
       "crate_name": "orchrd",
@@ -801,13 +693,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 1106,
+      "line": 983,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "controller::string_arg@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1194",
+      "id": "controller::string_arg@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1055",
       "name": "string_arg",
       "qualified_path": "controller::string_arg",
       "crate_name": "orchrd",
@@ -815,13 +707,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 1194,
+      "line": 1055,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "conversation_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:570",
+      "id": "conversation_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:454",
       "name": "conversation_worker",
       "qualified_path": "conversation_worker",
       "crate_name": "orchrd",
@@ -829,13 +721,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 570,
+      "line": 454,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "coordinator::operation_evidence@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:904",
+      "id": "coordinator::operation_evidence@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:787",
       "name": "operation_evidence",
       "qualified_path": "coordinator::operation_evidence",
       "crate_name": "orchrd",
@@ -843,13 +735,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 904,
+      "line": 787,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "current@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:89",
+      "id": "current@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:84",
       "name": "current",
       "qualified_path": "current",
       "crate_name": "orchrd",
@@ -857,13 +749,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 89,
+      "line": 84,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "current@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:191",
+      "id": "current@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:331",
       "name": "current",
       "qualified_path": "current",
       "crate_name": "orchrd",
@@ -871,13 +763,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 191,
+      "line": 331,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "data_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:291",
+      "id": "data_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:283",
       "name": "data_dir",
       "qualified_path": "data_dir",
       "crate_name": "orchrd",
@@ -885,13 +777,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 291,
+      "line": 283,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "db::insert_message@/home/kacper/Documents/Projects/orchrd/src/db.rs:262",
+      "id": "db::insert_message@/home/kacper/Documents/Projects/orchrd/src/db.rs:185",
       "name": "insert_message",
       "qualified_path": "db::insert_message",
       "crate_name": "orchrd",
@@ -899,21 +791,7 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 262,
-      "col": 3,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "db::response_row@/home/kacper/Documents/Projects/orchrd/src/db.rs:277",
-      "name": "response_row",
-      "qualified_path": "db::response_row",
-      "crate_name": "orchrd",
-      "module": [
-        "db"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 277,
+      "line": 185,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
@@ -943,7 +821,7 @@
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:152",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:144",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -951,13 +829,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 152,
+      "line": 144,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:178",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:170",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -965,13 +843,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 178,
+      "line": 170,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:196",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:188",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -979,13 +857,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 196,
+      "line": 188,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:205",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:197",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -993,13 +871,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 205,
+      "line": 197,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:212",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:204",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -1007,13 +885,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 212,
+      "line": 204,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:39",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:31",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -1021,13 +899,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 39,
+      "line": 31,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:81",
+      "id": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:73",
       "name": "default",
       "qualified_path": "default",
       "crate_name": "orchrd",
@@ -1035,13 +913,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 81,
+      "line": 73,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "default_path@/home/kacper/Documents/Projects/orchrd/src/config.rs:232",
+      "id": "default_path@/home/kacper/Documents/Projects/orchrd/src/config.rs:224",
       "name": "default_path",
       "qualified_path": "default_path",
       "crate_name": "orchrd",
@@ -1049,22 +927,8 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 232,
+      "line": 224,
       "col": 11,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "describe_blocker@/home/kacper/Documents/Projects/orchrd/src/intent.rs:101",
-      "name": "describe_blocker",
-      "qualified_path": "describe_blocker",
-      "crate_name": "orchrd",
-      "module": [
-        "intent"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "line": 101,
-      "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
@@ -1151,7 +1015,7 @@
       "is_trait_method": false
     },
     {
-      "id": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:411",
+      "id": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:386",
       "name": "dialog_worker",
       "qualified_path": "dialog_worker",
       "crate_name": "orchrd",
@@ -1159,7 +1023,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 411,
+      "line": 386,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -1177,7 +1041,7 @@
       "is_trait_method": false
     },
     {
-      "id": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:280",
+      "id": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:268",
       "name": "dispatch_transcript",
       "qualified_path": "dispatch_transcript",
       "crate_name": "orchrd",
@@ -1185,7 +1049,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 280,
+      "line": 268,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
@@ -1201,20 +1065,6 @@
       "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
       "line": 69,
       "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "drop@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:370",
-      "name": "drop",
-      "qualified_path": "drop",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 370,
-      "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
@@ -1283,7 +1133,7 @@
       "is_trait_method": false
     },
     {
-      "id": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
+      "id": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:750",
       "name": "execute_tool",
       "qualified_path": "execute_tool",
       "crate_name": "orchrd",
@@ -1291,7 +1141,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 868,
+      "line": 750,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -1323,7 +1173,7 @@
       "is_trait_method": false
     },
     {
-      "id": "finish@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:477",
+      "id": "finish@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:615",
       "name": "finish",
       "qualified_path": "finish",
       "crate_name": "orchrd",
@@ -1331,13 +1181,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 477,
+      "line": 615,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "finish_delivery@/home/kacper/Documents/Projects/orchrd/src/db.rs:241",
+      "id": "finish_delivery@/home/kacper/Documents/Projects/orchrd/src/db.rs:164",
       "name": "finish_delivery",
       "qualified_path": "finish_delivery",
       "crate_name": "orchrd",
@@ -1345,21 +1195,7 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 241,
-      "col": 11,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "finish_response@/home/kacper/Documents/Projects/orchrd/src/db.rs:191",
-      "name": "finish_response",
-      "qualified_path": "finish_response",
-      "crate_name": "orchrd",
-      "module": [
-        "db"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 191,
+      "line": 164,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -1377,7 +1213,7 @@
       "is_trait_method": false
     },
     {
-      "id": "fmt@/home/kacper/Documents/Projects/orchrd/src/config.rs:71",
+      "id": "fmt@/home/kacper/Documents/Projects/orchrd/src/config.rs:63",
       "name": "fmt",
       "qualified_path": "fmt",
       "crate_name": "orchrd",
@@ -1385,7 +1221,7 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 71,
+      "line": 63,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -1477,19 +1313,19 @@
       "is_trait_method": false
     },
     {
-      "id": "getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:358",
+      "id": "getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:350",
       "name": "getuid",
       "qualified_path": "getuid",
       "crate_name": "orchrd",
       "module": [],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 358,
+      "line": 350,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "id": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "name": "handle",
       "qualified_path": "handle",
       "crate_name": "orchrd",
@@ -1497,7 +1333,7 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 336,
+      "line": 316,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -1515,7 +1351,21 @@
       "is_trait_method": false
     },
     {
-      "id": "herdr::parse_roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:493",
+      "id": "herdr::input_args@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:691",
+      "name": "input_args",
+      "qualified_path": "herdr::input_args",
+      "crate_name": "orchrd",
+      "module": [
+        "herdr"
+      ],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 691,
+      "col": 3,
+      "is_workspace": true,
+      "is_trait_method": false
+    },
+    {
+      "id": "herdr::parse_roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:631",
       "name": "parse_roster",
       "qualified_path": "herdr::parse_roster",
       "crate_name": "orchrd",
@@ -1523,27 +1373,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 493,
+      "line": 631,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "herdr@/home/kacper/Documents/Projects/orchrd/src/agents.rs:25",
-      "name": "herdr",
-      "qualified_path": "herdr",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 25,
-      "col": 11,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "history@/home/kacper/Documents/Projects/orchrd/src/db.rs:155",
+      "id": "history@/home/kacper/Documents/Projects/orchrd/src/db.rs:126",
       "name": "history",
       "qualified_path": "history",
       "crate_name": "orchrd",
@@ -1551,7 +1387,7 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 155,
+      "line": 126,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -1569,7 +1405,7 @@
       "is_trait_method": false
     },
     {
-      "id": "initial@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:43",
+      "id": "initial@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:38",
       "name": "initial",
       "qualified_path": "initial",
       "crate_name": "orchrd",
@@ -1577,13 +1413,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 43,
+      "line": 38,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "input@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:323",
+      "id": "input@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:463",
       "name": "input",
       "qualified_path": "input",
       "crate_name": "orchrd",
@@ -1591,13 +1427,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 323,
+      "line": 463,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "intent::parse_value@/home/kacper/Documents/Projects/orchrd/src/intent.rs:135",
+      "id": "intent::parse_value@/home/kacper/Documents/Projects/orchrd/src/intent.rs:124",
       "name": "parse_value",
       "qualified_path": "intent::parse_value",
       "crate_name": "orchrd",
@@ -1605,13 +1441,13 @@
         "intent"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "line": 135,
+      "line": 124,
       "col": 3,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "intent::redact@/home/kacper/Documents/Projects/orchrd/src/intent.rs:146",
+      "id": "intent::redact@/home/kacper/Documents/Projects/orchrd/src/intent.rs:135",
       "name": "redact",
       "qualified_path": "intent::redact",
       "crate_name": "orchrd",
@@ -1619,13 +1455,13 @@
         "intent"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "line": 146,
+      "line": 135,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "intent::routing_agents@/home/kacper/Documents/Projects/orchrd/src/intent.rs:127",
+      "id": "intent::routing_agents@/home/kacper/Documents/Projects/orchrd/src/intent.rs:116",
       "name": "routing_agents",
       "qualified_path": "intent::routing_agents",
       "crate_name": "orchrd",
@@ -1633,7 +1469,7 @@
         "intent"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "line": 127,
+      "line": 116,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -1647,18 +1483,6 @@
       "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/interval.rs",
       "line": 72,
       "col": 7,
-      "is_workspace": false,
-      "is_trait_method": false
-    },
-    {
-      "id": "into_split@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/net/unix/stream.rs:1009",
-      "name": "into_split",
-      "qualified_path": "into_split",
-      "crate_name": "tokio",
-      "module": [],
-      "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/net/unix/stream.rs",
-      "line": 1009,
-      "col": 11,
       "is_workspace": false,
       "is_trait_method": false
     },
@@ -1771,6 +1595,18 @@
       "is_trait_method": false
     },
     {
+      "id": "join_next@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/join_set.rs:295",
+      "name": "join_next",
+      "qualified_path": "join_next",
+      "crate_name": "tokio",
+      "module": [],
+      "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/join_set.rs",
+      "line": 295,
+      "col": 17,
+      "is_workspace": false,
+      "is_trait_method": false
+    },
+    {
       "id": "json@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/reqwest-0.12.28/src/async_impl/request.rs:446",
       "name": "json",
       "qualified_path": "json",
@@ -1795,20 +1631,6 @@
       "is_trait_method": false
     },
     {
-      "id": "latest_response@/home/kacper/Documents/Projects/orchrd/src/db.rs:211",
-      "name": "latest_response",
-      "qualified_path": "latest_response",
-      "crate_name": "orchrd",
-      "module": [
-        "db"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 211,
-      "col": 11,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
       "id": "linked@/home/kacper/Documents/Projects/orchrd/src/activity.rs:40",
       "name": "linked",
       "qualified_path": "linked",
@@ -1823,7 +1645,7 @@
       "is_trait_method": false
     },
     {
-      "id": "load@/home/kacper/Documents/Projects/orchrd/src/config.rs:238",
+      "id": "load@/home/kacper/Documents/Projects/orchrd/src/config.rs:230",
       "name": "load",
       "qualified_path": "load",
       "crate_name": "orchrd",
@@ -1831,7 +1653,7 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 238,
+      "line": 230,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -1849,14 +1671,16 @@
       "is_trait_method": false
     },
     {
-      "id": "main@/home/kacper/Documents/Projects/orchrd/src/bin/orchrd.rs:3",
-      "name": "main",
-      "qualified_path": "main",
+      "id": "machines@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:98",
+      "name": "machines",
+      "qualified_path": "machines",
       "crate_name": "orchrd",
-      "module": [],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/bin/orchrd.rs",
-      "line": 3,
-      "col": 3,
+      "module": [
+        "herdr"
+      ],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 98,
+      "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
@@ -1885,7 +1709,7 @@
       "is_trait_method": false
     },
     {
-      "id": "mark_detection@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:204",
+      "id": "mark_detection@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:344",
       "name": "mark_detection",
       "qualified_path": "mark_detection",
       "crate_name": "orchrd",
@@ -1893,7 +1717,7 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 204,
+      "line": 344,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
@@ -1961,18 +1785,6 @@
       "is_trait_method": false
     },
     {
-      "id": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/io/util/buf_reader.rs:39",
-      "name": "new",
-      "qualified_path": "new",
-      "crate_name": "tokio",
-      "module": [],
-      "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/io/util/buf_reader.rs",
-      "line": 39,
-      "col": 11,
-      "is_workspace": false,
-      "is_trait_method": false
-    },
-    {
       "id": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/process/mod.rs:316",
       "name": "new",
       "qualified_path": "new",
@@ -1992,18 +1804,6 @@
       "module": [],
       "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mutex.rs",
       "line": 337,
-      "col": 11,
-      "is_workspace": false,
-      "is_trait_method": false
-    },
-    {
-      "id": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/notify.rs:479",
-      "name": "new",
-      "qualified_path": "new",
-      "crate_name": "tokio",
-      "module": [],
-      "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/notify.rs",
-      "line": 479,
       "col": 11,
       "is_workspace": false,
       "is_trait_method": false
@@ -2047,21 +1847,7 @@
       "is_trait_method": false
     },
     {
-      "id": "new@/home/kacper/Documents/Projects/orchrd/src/agents.rs:19",
-      "name": "new",
-      "qualified_path": "new",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 19,
-      "col": 11,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
+      "id": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
       "name": "new",
       "qualified_path": "new",
       "crate_name": "orchrd",
@@ -2069,13 +1855,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 61,
+      "line": 59,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "new@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:218",
+      "id": "new@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:200",
       "name": "new",
       "qualified_path": "new",
       "crate_name": "orchrd",
@@ -2083,13 +1869,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 218,
+      "line": 200,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "new@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:34",
+      "id": "new@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:49",
       "name": "new",
       "qualified_path": "new",
       "crate_name": "orchrd",
@@ -2097,7 +1883,7 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 34,
+      "line": 49,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -2197,7 +1983,7 @@
       "is_trait_method": false
     },
     {
-      "id": "next@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:175",
+      "id": "next@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:315",
       "name": "next",
       "qualified_path": "next",
       "crate_name": "orchrd",
@@ -2205,22 +1991,8 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 175,
+      "line": 315,
       "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "next_response@/home/kacper/Documents/Projects/orchrd/src/db.rs:180",
-      "name": "next_response",
-      "qualified_path": "next_response",
-      "crate_name": "orchrd",
-      "module": [
-        "db"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 180,
-      "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
@@ -2261,7 +2033,7 @@
       "is_trait_method": false
     },
     {
-      "id": "observe@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:804",
+      "id": "observe@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:687",
       "name": "observe",
       "qualified_path": "observe",
       "crate_name": "orchrd",
@@ -2269,7 +2041,7 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 804,
+      "line": 687,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -2287,7 +2059,7 @@
       "is_trait_method": false
     },
     {
-      "id": "open@/home/kacper/Documents/Projects/orchrd/src/db.rs:32",
+      "id": "open@/home/kacper/Documents/Projects/orchrd/src/db.rs:20",
       "name": "open",
       "qualified_path": "open",
       "crate_name": "orchrd",
@@ -2295,13 +2067,13 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 32,
+      "line": 20,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:977",
+      "id": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:854",
       "name": "operation",
       "qualified_path": "operation",
       "crate_name": "orchrd",
@@ -2309,7 +2081,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 977,
+      "line": 854,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -2339,20 +2111,6 @@
       "is_trait_method": false
     },
     {
-      "id": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "name": "peer",
-      "qualified_path": "peer",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 60,
-      "col": 13,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
       "id": "play_stream@/home/kacper/Documents/Projects/orchrd/src/tts.rs:67",
       "name": "play_stream",
       "qualified_path": "play_stream",
@@ -2379,7 +2137,7 @@
       "is_trait_method": false
     },
     {
-      "id": "poll@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:126",
+      "id": "poll@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:266",
       "name": "poll",
       "qualified_path": "poll",
       "crate_name": "orchrd",
@@ -2387,13 +2145,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 126,
+      "line": 266,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "poll_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:376",
+      "id": "poll_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:358",
       "name": "poll_worker",
       "qualified_path": "poll_worker",
       "crate_name": "orchrd",
@@ -2401,7 +2159,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 376,
+      "line": 358,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -2447,7 +2205,7 @@
       "is_trait_method": false
     },
     {
-      "id": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
+      "id": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
       "name": "process_turn",
       "qualified_path": "process_turn",
       "crate_name": "orchrd",
@@ -2455,13 +2213,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 604,
+      "line": 488,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
+      "id": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:236",
       "name": "publish",
       "qualified_path": "publish",
       "crate_name": "orchrd",
@@ -2469,7 +2227,7 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 256,
+      "line": 236,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -2531,35 +2289,7 @@
       "is_trait_method": false
     },
     {
-      "id": "question@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:281",
-      "name": "question",
-      "qualified_path": "question",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 281,
-      "col": 24,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "question@/home/kacper/Documents/Projects/orchrd/src/agents.rs:50",
-      "name": "question",
-      "qualified_path": "question",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 50,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:292",
+      "id": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:432",
       "name": "question",
       "qualified_path": "question",
       "crate_name": "orchrd",
@@ -2567,41 +2297,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 292,
+      "line": 432,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:284",
-      "name": "question_ids",
-      "qualified_path": "question_ids",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 284,
-      "col": 24,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agents.rs:56",
-      "name": "question_ids",
-      "qualified_path": "question_ids",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 56,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:304",
+      "id": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:444",
       "name": "question_ids",
       "qualified_path": "question_ids",
       "crate_name": "orchrd",
@@ -2609,41 +2311,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 304,
+      "line": 444,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "questions@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:296",
-      "name": "questions",
-      "qualified_path": "questions",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 296,
-      "col": 24,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "questions@/home/kacper/Documents/Projects/orchrd/src/agents.rs:62",
-      "name": "questions",
-      "qualified_path": "questions",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 62,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:281",
+      "id": "questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:421",
       "name": "questions",
       "qualified_path": "questions",
       "crate_name": "orchrd",
@@ -2651,13 +2325,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 281,
+      "line": 421,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
+      "id": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
       "name": "queue_speech",
       "qualified_path": "queue_speech",
       "crate_name": "orchrd",
@@ -2665,41 +2339,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 279,
+      "line": 259,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "read@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:271",
-      "name": "read",
-      "qualified_path": "read",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 271,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "read@/home/kacper/Documents/Projects/orchrd/src/agents.rs:44",
-      "name": "read",
-      "qualified_path": "read",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 44,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "read@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:118",
+      "id": "read@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:258",
       "name": "read",
       "qualified_path": "read",
       "crate_name": "orchrd",
@@ -2707,13 +2353,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 118,
+      "line": 258,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "record@/home/kacper/Documents/Projects/orchrd/src/controller.rs:159",
+      "id": "record@/home/kacper/Documents/Projects/orchrd/src/controller.rs:147",
       "name": "record",
       "qualified_path": "record",
       "crate_name": "orchrd",
@@ -2721,7 +2367,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 159,
+      "line": 147,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -2763,7 +2409,7 @@
       "is_trait_method": false
     },
     {
-      "id": "repeat_last@/home/kacper/Documents/Projects/orchrd/src/controller.rs:188",
+      "id": "repeat_last@/home/kacper/Documents/Projects/orchrd/src/controller.rs:176",
       "name": "repeat_last",
       "qualified_path": "repeat_last",
       "crate_name": "orchrd",
@@ -2771,13 +2417,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 188,
+      "line": 176,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "reply@/home/kacper/Documents/Projects/orchrd/src/controller.rs:177",
+      "id": "reply@/home/kacper/Documents/Projects/orchrd/src/controller.rs:165",
       "name": "reply",
       "qualified_path": "reply",
       "crate_name": "orchrd",
@@ -2785,7 +2431,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 177,
+      "line": 165,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -2859,7 +2505,7 @@
       "is_trait_method": false
     },
     {
-      "id": "rescan_questions@/home/kacper/Documents/Projects/orchrd/src/controller.rs:475",
+      "id": "rescan_questions@/home/kacper/Documents/Projects/orchrd/src/controller.rs:450",
       "name": "rescan_questions",
       "qualified_path": "rescan_questions",
       "crate_name": "orchrd",
@@ -2867,13 +2513,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 475,
+      "line": 450,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "resolve_approval@/home/kacper/Documents/Projects/orchrd/src/controller.rs:311",
+      "id": "resolve_approval@/home/kacper/Documents/Projects/orchrd/src/controller.rs:299",
       "name": "resolve_approval",
       "qualified_path": "resolve_approval",
       "crate_name": "orchrd",
@@ -2881,13 +2527,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 311,
+      "line": 299,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "resolve_pending@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:861",
+      "id": "resolve_pending@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:744",
       "name": "resolve_pending",
       "qualified_path": "resolve_pending",
       "crate_name": "orchrd",
@@ -2895,13 +2541,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 861,
+      "line": 744,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "retry@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:470",
+      "id": "retry@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:608",
       "name": "retry",
       "qualified_path": "retry",
       "crate_name": "orchrd",
@@ -2909,13 +2555,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 470,
+      "line": 608,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:69",
+      "id": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:159",
       "name": "roster",
       "qualified_path": "roster",
       "crate_name": "orchrd",
@@ -2923,7 +2569,21 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 69,
+      "line": 159,
+      "col": 13,
+      "is_workspace": true,
+      "is_trait_method": false
+    },
+    {
+      "id": "roster_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:135",
+      "name": "roster_at",
+      "qualified_path": "roster_at",
+      "crate_name": "orchrd",
+      "module": [
+        "herdr"
+      ],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 135,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -3027,7 +2687,7 @@
       "is_trait_method": false
     },
     {
-      "id": "routing_questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:314",
+      "id": "routing_questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:454",
       "name": "routing_questions",
       "qualified_path": "routing_questions",
       "crate_name": "orchrd",
@@ -3035,13 +2695,13 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 314,
+      "line": 454,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:342",
+      "id": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:330",
       "name": "run",
       "qualified_path": "run",
       "crate_name": "orchrd",
@@ -3049,13 +2709,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 342,
+      "line": 330,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "run@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:238",
+      "id": "run@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:218",
       "name": "run",
       "qualified_path": "run",
       "crate_name": "orchrd",
@@ -3063,13 +2723,13 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 238,
+      "line": 218,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "run@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:42",
+      "id": "run@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:57",
       "name": "run",
       "qualified_path": "run",
       "crate_name": "orchrd",
@@ -3077,13 +2737,27 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 42,
+      "line": 57,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "runtime_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:285",
+      "id": "run_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:60",
+      "name": "run_at",
+      "qualified_path": "run_at",
+      "crate_name": "orchrd",
+      "module": [
+        "herdr"
+      ],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 60,
+      "col": 13,
+      "is_workspace": true,
+      "is_trait_method": false
+    },
+    {
+      "id": "runtime_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:277",
       "name": "runtime_dir",
       "qualified_path": "runtime_dir",
       "crate_name": "orchrd",
@@ -3091,13 +2765,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 285,
+      "line": 277,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "screen@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:73",
+      "id": "screen@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:229",
       "name": "screen",
       "qualified_path": "screen",
       "crate_name": "orchrd",
@@ -3105,7 +2779,21 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 73,
+      "line": 229,
+      "col": 13,
+      "is_workspace": true,
+      "is_trait_method": false
+    },
+    {
+      "id": "screen_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:203",
+      "name": "screen_at",
+      "qualified_path": "screen_at",
+      "crate_name": "orchrd",
+      "module": [
+        "herdr"
+      ],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 203,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -3135,19 +2823,7 @@
       "is_trait_method": false
     },
     {
-      "id": "send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:621",
-      "name": "send",
-      "qualified_path": "send",
-      "crate_name": "tokio",
-      "module": [],
-      "file": "/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs",
-      "line": 621,
-      "col": 11,
-      "is_workspace": false,
-      "is_trait_method": false
-    },
-    {
-      "id": "send@/home/kacper/Documents/Projects/orchrd/src/controller.rs:119",
+      "id": "send@/home/kacper/Documents/Projects/orchrd/src/controller.rs:107",
       "name": "send",
       "qualified_path": "send",
       "crate_name": "orchrd",
@@ -3155,7 +2831,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 119,
+      "line": 107,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -3199,34 +2875,6 @@
       "is_trait_method": false
     },
     {
-      "id": "serve@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:35",
-      "name": "serve",
-      "qualified_path": "serve",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 35,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "serve@/home/kacper/Documents/Projects/orchrd/src/agents.rs:32",
-      "name": "serve",
-      "qualified_path": "serve",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 32,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
       "id": "set@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:13",
       "name": "set",
       "qualified_path": "set",
@@ -3251,7 +2899,7 @@
       "is_trait_method": false
     },
     {
-      "id": "set_announcement_mode@/home/kacper/Documents/Projects/orchrd/src/controller.rs:185",
+      "id": "set_announcement_mode@/home/kacper/Documents/Projects/orchrd/src/controller.rs:173",
       "name": "set_announcement_mode",
       "qualified_path": "set_announcement_mode",
       "crate_name": "orchrd",
@@ -3259,7 +2907,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 185,
+      "line": 173,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
@@ -3277,7 +2925,7 @@
       "is_trait_method": false
     },
     {
-      "id": "set_setting@/home/kacper/Documents/Projects/orchrd/src/db.rs:134",
+      "id": "set_setting@/home/kacper/Documents/Projects/orchrd/src/db.rs:105",
       "name": "set_setting",
       "qualified_path": "set_setting",
       "crate_name": "orchrd",
@@ -3285,13 +2933,13 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 134,
+      "line": 105,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "setting@/home/kacper/Documents/Projects/orchrd/src/db.rs:124",
+      "id": "setting@/home/kacper/Documents/Projects/orchrd/src/db.rs:95",
       "name": "setting",
       "qualified_path": "setting",
       "crate_name": "orchrd",
@@ -3299,7 +2947,7 @@
         "db"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "line": 124,
+      "line": 95,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -3329,35 +2977,7 @@
       "is_trait_method": false
     },
     {
-      "id": "snapshot@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:254",
-      "name": "snapshot",
-      "qualified_path": "snapshot",
-      "crate_name": "orchrd",
-      "module": [
-        "agent_bridge"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "line": 254,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "snapshot@/home/kacper/Documents/Projects/orchrd/src/agents.rs:38",
-      "name": "snapshot",
-      "qualified_path": "snapshot",
-      "crate_name": "orchrd",
-      "module": [
-        "agents"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "line": 38,
-      "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "snapshot@/home/kacper/Documents/Projects/orchrd/src/controller.rs:116",
+      "id": "snapshot@/home/kacper/Documents/Projects/orchrd/src/controller.rs:104",
       "name": "snapshot",
       "qualified_path": "snapshot",
       "crate_name": "orchrd",
@@ -3365,8 +2985,22 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 116,
+      "line": 104,
       "col": 17,
+      "is_workspace": true,
+      "is_trait_method": false
+    },
+    {
+      "id": "source_for@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:118",
+      "name": "source_for",
+      "qualified_path": "source_for",
+      "crate_name": "orchrd",
+      "module": [
+        "herdr"
+      ],
+      "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "line": 118,
+      "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
@@ -3435,7 +3069,7 @@
       "is_trait_method": false
     },
     {
-      "id": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1040",
+      "id": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:917",
       "name": "speech_worker",
       "qualified_path": "speech_worker",
       "crate_name": "orchrd",
@@ -3443,7 +3077,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 1040,
+      "line": 917,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -3475,7 +3109,7 @@
       "is_trait_method": false
     },
     {
-      "id": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
+      "id": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
       "name": "start_listening",
       "qualified_path": "start_listening",
       "crate_name": "orchrd",
@@ -3483,7 +3117,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 191,
+      "line": 179,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
@@ -3541,7 +3175,7 @@
       "is_trait_method": false
     },
     {
-      "id": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:226",
+      "id": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:214",
       "name": "stop_listening",
       "qualified_path": "stop_listening",
       "crate_name": "orchrd",
@@ -3549,13 +3183,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 226,
+      "line": 214,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "store@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:215",
+      "id": "store@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:355",
       "name": "store",
       "qualified_path": "store",
       "crate_name": "orchrd",
@@ -3563,7 +3197,7 @@
         "herdr"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "line": 215,
+      "line": 355,
       "col": 17,
       "is_workspace": true,
       "is_trait_method": false
@@ -3649,7 +3283,7 @@
       "is_trait_method": false
     },
     {
-      "id": "subscribe@/home/kacper/Documents/Projects/orchrd/src/controller.rs:113",
+      "id": "subscribe@/home/kacper/Documents/Projects/orchrd/src/controller.rs:101",
       "name": "subscribe",
       "qualified_path": "subscribe",
       "crate_name": "orchrd",
@@ -3657,7 +3291,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 113,
+      "line": 101,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -3673,20 +3307,6 @@
       "file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
       "line": 91,
       "col": 17,
-      "is_workspace": true,
-      "is_trait_method": false
-    },
-    {
-      "id": "summary_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:483",
-      "name": "summary_worker",
-      "qualified_path": "summary_worker",
-      "crate_name": "orchrd",
-      "module": [
-        "controller"
-      ],
-      "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 483,
-      "col": 13,
       "is_workspace": true,
       "is_trait_method": false
     },
@@ -3893,7 +3513,7 @@
       "is_trait_method": false
     },
     {
-      "id": "trace@/home/kacper/Documents/Projects/orchrd/src/controller.rs:125",
+      "id": "trace@/home/kacper/Documents/Projects/orchrd/src/controller.rs:113",
       "name": "trace",
       "qualified_path": "trace",
       "crate_name": "orchrd",
@@ -3901,13 +3521,13 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 125,
+      "line": 113,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:276",
+      "id": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
       "name": "trace",
       "qualified_path": "trace",
       "crate_name": "orchrd",
@@ -3915,7 +3535,7 @@
         "coordinator"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "line": 276,
+      "line": 256,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
@@ -3999,7 +3619,7 @@
       "is_trait_method": false
     },
     {
-      "id": "tts_socket@/home/kacper/Documents/Projects/orchrd/src/config.rs:297",
+      "id": "tts_socket@/home/kacper/Documents/Projects/orchrd/src/config.rs:289",
       "name": "tts_socket",
       "qualified_path": "tts_socket",
       "crate_name": "orchrd",
@@ -4007,13 +3627,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 297,
+      "line": 289,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "validate@/home/kacper/Documents/Projects/orchrd/src/config.rs:164",
+      "id": "validate@/home/kacper/Documents/Projects/orchrd/src/config.rs:156",
       "name": "validate",
       "qualified_path": "validate",
       "crate_name": "orchrd",
@@ -4021,13 +3641,13 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 164,
+      "line": 156,
       "col": 7,
       "is_workspace": true,
       "is_trait_method": false
     },
     {
-      "id": "validate@/home/kacper/Documents/Projects/orchrd/src/config.rs:246",
+      "id": "validate@/home/kacper/Documents/Projects/orchrd/src/config.rs:238",
       "name": "validate",
       "qualified_path": "validate",
       "crate_name": "orchrd",
@@ -4035,7 +3655,7 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 246,
+      "line": 238,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -4055,7 +3675,7 @@
       "is_trait_method": false
     },
     {
-      "id": "validate_runtime@/home/kacper/Documents/Projects/orchrd/src/config.rs:273",
+      "id": "validate_runtime@/home/kacper/Documents/Projects/orchrd/src/config.rs:265",
       "name": "validate_runtime",
       "qualified_path": "validate_runtime",
       "crate_name": "orchrd",
@@ -4063,7 +3683,7 @@
         "config"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "line": 273,
+      "line": 265,
       "col": 11,
       "is_workspace": true,
       "is_trait_method": false
@@ -4081,7 +3701,7 @@
       "is_trait_method": false
     },
     {
-      "id": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:146",
+      "id": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
       "name": "voice",
       "qualified_path": "voice",
       "crate_name": "orchrd",
@@ -4089,7 +3709,7 @@
         "controller"
       ],
       "file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "line": 146,
+      "line": 134,
       "col": 13,
       "is_workspace": true,
       "is_trait_method": false
@@ -4135,20 +3755,6 @@
       "call_site_line": 64
     },
     {
-      "source": "agent_bridge::messages_scope@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:408",
-      "target": "oneshot::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:496",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 409
-    },
-    {
-      "source": "agent_bridge::read_frame@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:388",
-      "target": "AsyncBufRead::consume@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/io/async_buf_read.rs:61",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 401
-    },
-    {
       "source": "answer_question@/home/kacper/Documents/Projects/orchrd/src/routing.rs:63",
       "target": "question::payload@/home/kacper/Documents/Projects/orchrd/src/question.rs:98",
       "kind": "DirectCall",
@@ -4156,18 +3762,18 @@
       "call_site_line": 81
     },
     {
-      "source": "api_key@/home/kacper/Documents/Projects/orchrd/src/config.rs:269",
-      "target": "config::credential@/home/kacper/Documents/Projects/orchrd/src/config.rs:331",
+      "source": "api_key@/home/kacper/Documents/Projects/orchrd/src/config.rs:261",
+      "target": "config::credential@/home/kacper/Documents/Projects/orchrd/src/config.rs:323",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "call_site_line": 270
+      "call_site_line": 262
     },
     {
-      "source": "append@/home/kacper/Documents/Projects/orchrd/src/db.rs:138",
-      "target": "db::insert_message@/home/kacper/Documents/Projects/orchrd/src/db.rs:262",
+      "source": "append@/home/kacper/Documents/Projects/orchrd/src/db.rs:109",
+      "target": "db::insert_message@/home/kacper/Documents/Projects/orchrd/src/db.rs:185",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/db.rs",
-      "call_site_line": 146
+      "call_site_line": 117
     },
     {
       "source": "approval_required@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:67",
@@ -4205,11 +3811,11 @@
       "call_site_line": 13
     },
     {
-      "source": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "source": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "target": "oneshot::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:496",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 135
+      "call_site_line": 123
     },
     {
       "source": "cancel@/home/kacper/Documents/Projects/orchrd/src/tts.rs:48",
@@ -4226,18 +3832,18 @@
       "call_site_line": 50
     },
     {
-      "source": "cancel_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:264",
+      "source": "cancel_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:252",
       "target": "cancel@/home/kacper/Documents/Projects/orchrd/src/stt.rs:116",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 267
+      "call_site_line": 255
     },
     {
-      "source": "cancel_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:264",
+      "source": "cancel_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:252",
       "target": "lock@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mutex.rs:433",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 265
+      "call_site_line": 253
     },
     {
       "source": "classify_with_questions@/home/kacper/Documents/Projects/orchrd/src/routing.rs:49",
@@ -4254,74 +3860,39 @@
       "call_site_line": 56
     },
     {
-      "source": "command@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:307",
-      "target": "command_with_timeout@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:311",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 308
-    },
-    {
-      "source": "command@/home/kacper/Documents/Projects/orchrd/src/agents.rs:68",
-      "target": "command@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:307",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 70
-    },
-    {
-      "source": "command@/home/kacper/Documents/Projects/orchrd/src/agents.rs:68",
-      "target": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:332",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 71
-    },
-    {
-      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:332",
+      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:490",
       "target": "Keys@/home/kacper/Documents/Projects/orchrd/src/terminal_input.rs:9",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 363
+      "call_site_line": 521
     },
     {
-      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:332",
+      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:490",
       "target": "Prompt@/home/kacper/Documents/Projects/orchrd/src/terminal_input.rs:7",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 361
+      "call_site_line": 519
     },
     {
-      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:332",
-      "target": "input@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:323",
+      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:490",
+      "target": "herdr::input_args@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:691",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 444
+      "call_site_line": 600
     },
     {
-      "source": "command_with_timeout@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:311",
-      "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
+      "source": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:490",
+      "target": "input@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:463",
       "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 318
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 601
     },
     {
-      "source": "command_with_timeout@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:311",
-      "target": "oneshot::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:496",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 319
-    },
-    {
-      "source": "command_with_timeout@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:311",
-      "target": "timeout::timeout@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/timeout.rs:85",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 352
-    },
-    {
-      "source": "complete@/home/kacper/Documents/Projects/orchrd/src/intent.rs:112",
+      "source": "complete@/home/kacper/Documents/Projects/orchrd/src/intent.rs:101",
       "target": "pointer@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:778",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "call_site_line": 120
+      "call_site_line": 109
     },
     {
       "source": "completion_finished@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:61",
@@ -4359,67 +3930,60 @@
       "call_site_line": 13
     },
     {
-      "source": "config::credential@/home/kacper/Documents/Projects/orchrd/src/config.rs:331",
+      "source": "config::credential@/home/kacper/Documents/Projects/orchrd/src/config.rs:323",
       "target": "from_str@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/http-1.5.0/src/header/value.rs:104",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "call_site_line": 338
+      "call_site_line": 330
     },
     {
-      "source": "config::libc_getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:356",
-      "target": "getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:358",
+      "source": "config::libc_getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:348",
+      "target": "getuid@/home/kacper/Documents/Projects/orchrd/src/config.rs:350",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "call_site_line": 360
+      "call_site_line": 352
     },
     {
-      "source": "context@/home/kacper/Documents/Projects/orchrd/src/controller.rs:139",
-      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "source": "context@/home/kacper/Documents/Projects/orchrd/src/controller.rs:127",
+      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 140
+      "call_site_line": 128
     },
     {
-      "source": "controller::string_arg@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1194",
+      "source": "controller::string_arg@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1055",
       "target": "get@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:304",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 1196
+      "call_site_line": 1057
     },
     {
-      "source": "conversation_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:570",
+      "source": "conversation_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:454",
       "target": "recv@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:242",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 571
+      "call_site_line": 455
     },
     {
-      "source": "current@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:191",
-      "target": "capture@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:96",
+      "source": "current@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:331",
+      "target": "capture@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:233",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 200
+      "call_site_line": 340
     },
     {
-      "source": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:178",
-      "target": "config::default_api_key_env@/home/kacper/Documents/Projects/orchrd/src/config.rs:224",
+      "source": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:170",
+      "target": "config::default_api_key_env@/home/kacper/Documents/Projects/orchrd/src/config.rs:216",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "call_site_line": 184
+      "call_site_line": 176
     },
     {
-      "source": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:178",
-      "target": "config::default_intent_timeout_seconds@/home/kacper/Documents/Projects/orchrd/src/config.rs:227",
+      "source": "default@/home/kacper/Documents/Projects/orchrd/src/config.rs:170",
+      "target": "config::default_intent_timeout_seconds@/home/kacper/Documents/Projects/orchrd/src/config.rs:219",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "call_site_line": 185
-    },
-    {
-      "source": "describe_blocker@/home/kacper/Documents/Projects/orchrd/src/intent.rs:101",
-      "target": "get@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:304",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "call_site_line": 107
+      "call_site_line": 177
     },
     {
       "source": "dialog::detect@/home/kacper/Documents/Projects/orchrd/src/dialog.rs:221",
@@ -4506,60 +4070,60 @@
       "call_site_line": 96
     },
     {
-      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:411",
+      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:386",
       "target": "linked@/home/kacper/Documents/Projects/orchrd/src/activity.rs:40",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 424
+      "call_site_line": 399
     },
     {
-      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:411",
+      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:386",
       "target": "new@/home/kacper/Documents/Projects/orchrd/src/activity.rs:19",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 423
+      "call_site_line": 398
     },
     {
-      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:411",
+      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:386",
       "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 419
+      "call_site_line": 394
     },
     {
-      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:411",
+      "source": "dialog_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:386",
       "target": "sleep::sleep@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/sleep.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 415
+      "call_site_line": 390
     },
     {
-      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:280",
+      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:268",
       "target": "borrow@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:628",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 286
+      "call_site_line": 274
     },
     {
-      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:280",
+      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:268",
       "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 288
+      "call_site_line": 276
     },
     {
-      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:280",
+      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:268",
       "target": "oneshot::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:496",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 287
+      "call_site_line": 275
     },
     {
-      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:280",
-      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agents.rs:56",
+      "source": "dispatch_transcript@/home/kacper/Documents/Projects/orchrd/src/controller.rs:268",
+      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:444",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 284
+      "call_site_line": 272
     },
     {
       "source": "draft_agent_request@/home/kacper/Documents/Projects/orchrd/src/intent.rs:69",
@@ -4567,13 +4131,6 @@
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
       "call_site_line": 88
-    },
-    {
-      "source": "drop@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:370",
-      "target": "spawn::spawn@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/spawn.rs:173",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 375
     },
     {
       "source": "drop@/home/kacper/Documents/Projects/orchrd/src/stt.rs:26",
@@ -4625,39 +4182,32 @@
       "call_site_line": 137
     },
     {
-      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
-      "target": "controller::pending_read_reason@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1120",
+      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:750",
+      "target": "controller::pending_read_reason@/home/kacper/Documents/Projects/orchrd/src/controller.rs:997",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 907
+      "call_site_line": 787
     },
     {
-      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
+      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:750",
       "target": "get@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:304",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 892
+      "call_site_line": 773
     },
     {
-      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
-      "target": "herdr@/home/kacper/Documents/Projects/orchrd/src/agents.rs:25",
+      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:750",
+      "target": "intent::routing_agents@/home/kacper/Documents/Projects/orchrd/src/intent.rs:116",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 889
+      "call_site_line": 760
     },
     {
-      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
-      "target": "intent::routing_agents@/home/kacper/Documents/Projects/orchrd/src/intent.rs:127",
+      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:750",
+      "target": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:854",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 878
-    },
-    {
-      "source": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
-      "target": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:977",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 938
+      "call_site_line": 815
     },
     {
       "source": "extract_dialog@/home/kacper/Documents/Projects/orchrd/src/intent.rs:45",
@@ -4682,7 +4232,7 @@
     },
     {
       "source": "from_config@/home/kacper/Documents/Projects/orchrd/src/tts.rs:27",
-      "target": "tts_socket@/home/kacper/Documents/Projects/orchrd/src/config.rs:297",
+      "target": "tts_socket@/home/kacper/Documents/Projects/orchrd/src/config.rs:289",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/tts.rs",
       "call_site_line": 28
@@ -4695,137 +4245,123 @@
       "call_site_line": 54
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "Error@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:68",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "Error@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:63",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 798
+      "call_site_line": 681
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "Transcript@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:65",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "Transcript@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:60",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 449
+      "call_site_line": 400
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "check_scope@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:250",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "check_scope@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:230",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 344
+      "call_site_line": 324
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "current@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:89",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "current@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:84",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 787
+      "call_site_line": 670
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "de::from_str@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs:2708",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "intent::redact@/home/kacper/Documents/Projects/orchrd/src/intent.rs:135",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 648
+      "call_site_line": 657
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "intent::redact@/home/kacper/Documents/Projects/orchrd/src/intent.rs:146",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 774
-    },
-    {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "linked@/home/kacper/Documents/Projects/orchrd/src/activity.rs:40",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 363
+      "call_site_line": 619
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "new@/home/kacper/Documents/Projects/orchrd/src/activity.rs:19",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 356
+      "call_site_line": 436
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 461
+      "call_site_line": 412
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "now@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/instant.rs:47",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 748
+      "call_site_line": 631
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 461
+      "call_site_line": 412
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/broadcast.rs:660",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 449
+      "call_site_line": 400
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:621",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
+      "target": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 347
+      "call_site_line": 320
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
-      "target": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:276",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 340
-    },
-    {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "tts::concise_speech@/home/kacper/Documents/Projects/orchrd/src/tts.rs:185",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 454
+      "call_site_line": 405
     },
     {
-      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:336",
+      "source": "handle@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:316",
       "target": "tts::plain_speech@/home/kacper/Documents/Projects/orchrd/src/tts.rs:162",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 602
+      "call_site_line": 553
     },
     {
-      "source": "initial@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:43",
+      "source": "initial@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:38",
       "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 56
+      "call_site_line": 51
     },
     {
-      "source": "input@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:323",
+      "source": "input@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:463",
       "target": "get@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:304",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 327
+      "call_site_line": 485
     },
     {
-      "source": "intent::parse_value@/home/kacper/Documents/Projects/orchrd/src/intent.rs:135",
+      "source": "intent::parse_value@/home/kacper/Documents/Projects/orchrd/src/intent.rs:124",
       "target": "de::from_str@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs:2708",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/intent.rs",
-      "call_site_line": 144
+      "call_site_line": 133
     },
     {
       "source": "main@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdctl.rs:5",
@@ -4940,81 +4476,53 @@
       "call_site_line": 26
     },
     {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/agents.rs:19",
-      "target": "Bridge@/home/kacper/Documents/Projects/orchrd/src/agents.rs:15",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 21
-    },
-    {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/agents.rs:19",
-      "target": "Herdr@/home/kacper/Documents/Projects/orchrd/src/agents.rs:16",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 22
-    },
-    {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/agents.rs:19",
-      "target": "new@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:34",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 22
-    },
-    {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
       "target": "bounded::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:158",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 79
+      "call_site_line": 77
     },
     {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
       "target": "broadcast::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/broadcast.rs:539",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 78
-    },
-    {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
-      "target": "initial@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:43",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
       "call_site_line": 76
     },
     {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
+      "target": "initial@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:38",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
+      "call_site_line": 74
+    },
+    {
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
       "target": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mutex.rs:337",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 104
-    },
-    {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
-      "target": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/notify.rs:479",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 82
-    },
-    {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
-      "target": "new@/home/kacper/Documents/Projects/orchrd/src/agents.rs:19",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
       "call_site_line": 92
     },
     {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
-      "target": "new@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:218",
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
+      "target": "new@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:200",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 83
+      "call_site_line": 80
     },
     {
-      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:61",
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
+      "target": "new@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:49",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
+      "call_site_line": 82
+    },
+    {
+      "source": "new@/home/kacper/Documents/Projects/orchrd/src/controller.rs:59",
       "target": "watch::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:553",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 77
+      "call_site_line": 75
     },
     {
       "source": "new@/home/kacper/Documents/Projects/orchrd/src/stt.rs:33",
@@ -5038,81 +4546,25 @@
       "call_site_line": 117
     },
     {
-      "source": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:977",
-      "target": "command@/home/kacper/Documents/Projects/orchrd/src/agents.rs:68",
+      "source": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:854",
+      "target": "command@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:490",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 1003
+      "call_site_line": 880
     },
     {
-      "source": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:977",
+      "source": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:854",
       "target": "oneshot::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/oneshot.rs:496",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 986
+      "call_site_line": 863
     },
     {
-      "source": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:977",
+      "source": "operation@/home/kacper/Documents/Projects/orchrd/src/controller.rs:854",
       "target": "timeout::timeout@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/timeout.rs:85",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 998
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "bounded::channel@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:158",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 67
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "get@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:304",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 110
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "into_split@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/net/unix/stream.rs:1009",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 65
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/io/util/buf_reader.rs:39",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 66
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 218
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "recv@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:242",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 69
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "spawn::spawn@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/spawn.rs:173",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 68
-    },
-    {
-      "source": "peer@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:60",
-      "target": "value::from_value@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:1036",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 111
+      "call_site_line": 875
     },
     {
       "source": "play_stream@/home/kacper/Documents/Projects/orchrd/src/tts.rs:67",
@@ -5129,18 +4581,18 @@
       "call_site_line": 72
     },
     {
-      "source": "poll@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:126",
-      "target": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:69",
+      "source": "poll@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:266",
+      "target": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:159",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 127
+      "call_site_line": 267
     },
     {
-      "source": "poll_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:376",
+      "source": "poll_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:358",
       "target": "sleep::sleep@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/sleep.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 403
+      "call_site_line": 383
     },
     {
       "source": "post@/home/kacper/Documents/Projects/orchrd/src/intent.rs:35",
@@ -5171,74 +4623,74 @@
       "call_site_line": 26
     },
     {
-      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
-      "target": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:868",
+      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
+      "target": "execute_tool@/home/kacper/Documents/Projects/orchrd/src/controller.rs:750",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 786
+      "call_site_line": 670
     },
     {
-      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
-      "target": "herdr@/home/kacper/Documents/Projects/orchrd/src/agents.rs:25",
+      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
+      "target": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:432",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 816
+      "call_site_line": 565
     },
     {
-      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
-      "target": "question@/home/kacper/Documents/Projects/orchrd/src/agents.rs:50",
+      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
+      "target": "questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:421",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 681
+      "call_site_line": 700
     },
     {
-      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
-      "target": "repeat_last@/home/kacper/Documents/Projects/orchrd/src/controller.rs:188",
+      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
+      "target": "repeat_last@/home/kacper/Documents/Projects/orchrd/src/controller.rs:176",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 644
+      "call_site_line": 528
     },
     {
-      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
-      "target": "reply@/home/kacper/Documents/Projects/orchrd/src/controller.rs:177",
+      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
+      "target": "reply@/home/kacper/Documents/Projects/orchrd/src/controller.rs:165",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 648
+      "call_site_line": 532
     },
     {
-      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:604",
+      "source": "process_turn@/home/kacper/Documents/Projects/orchrd/src/controller.rs:488",
       "target": "routing::acknowledgement@/home/kacper/Documents/Projects/orchrd/src/routing.rs:259",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 728
+      "call_site_line": 612
     },
     {
-      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
-      "target": "Snapshot@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:64",
+      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:236",
+      "target": "Snapshot@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:59",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 273
+      "call_site_line": 253
     },
     {
-      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
+      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:236",
       "target": "borrow@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:1252",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 268
+      "call_site_line": 248
     },
     {
-      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
+      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:236",
       "target": "send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/broadcast.rs:660",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 273
+      "call_site_line": 253
     },
     {
-      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
+      "source": "publish@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:236",
       "target": "send_replace@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:1228",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 270
+      "call_site_line": 250
     },
     {
       "source": "question::mode_payload@/home/kacper/Documents/Projects/orchrd/src/question.rs:83",
@@ -5262,137 +4714,81 @@
       "call_site_line": 99
     },
     {
-      "source": "question@/home/kacper/Documents/Projects/orchrd/src/agents.rs:50",
-      "target": "question@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:281",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 52
-    },
-    {
-      "source": "question@/home/kacper/Documents/Projects/orchrd/src/agents.rs:50",
-      "target": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:292",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 53
-    },
-    {
-      "source": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:292",
-      "target": "current@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:191",
+      "source": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:432",
+      "target": "current@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:331",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 298
+      "call_site_line": 438
     },
     {
-      "source": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:292",
+      "source": "question@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:432",
       "target": "value::from_value@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/value/mod.rs:1036",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 302
+      "call_site_line": 442
     },
     {
-      "source": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agents.rs:56",
-      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:284",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 58
-    },
-    {
-      "source": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agents.rs:56",
-      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:304",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 59
-    },
-    {
-      "source": "questions@/home/kacper/Documents/Projects/orchrd/src/agents.rs:62",
-      "target": "questions@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:296",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 64
-    },
-    {
-      "source": "questions@/home/kacper/Documents/Projects/orchrd/src/agents.rs:62",
-      "target": "routing_questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:314",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 65
-    },
-    {
-      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
-      "target": "Error@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:68",
+      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
+      "target": "Error@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:63",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 328
+      "call_site_line": 308
     },
     {
-      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
+      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
       "target": "linked@/home/kacper/Documents/Projects/orchrd/src/activity.rs:40",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 297
+      "call_site_line": 277
     },
     {
-      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
+      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
       "target": "new@/home/kacper/Documents/Projects/orchrd/src/activity.rs:19",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 290
+      "call_site_line": 270
     },
     {
-      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
+      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
       "target": "send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/broadcast.rs:660",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 328
+      "call_site_line": 308
     },
     {
-      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
-      "target": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:276",
+      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
+      "target": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 289
+      "call_site_line": 269
     },
     {
-      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:279",
+      "source": "queue_speech@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:259",
       "target": "try_send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:923",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 306
+      "call_site_line": 286
     },
     {
-      "source": "read@/home/kacper/Documents/Projects/orchrd/src/agents.rs:44",
-      "target": "read@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:271",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 46
-    },
-    {
-      "source": "read@/home/kacper/Documents/Projects/orchrd/src/agents.rs:44",
-      "target": "read@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:118",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 47
-    },
-    {
-      "source": "record@/home/kacper/Documents/Projects/orchrd/src/controller.rs:159",
-      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "source": "record@/home/kacper/Documents/Projects/orchrd/src/controller.rs:147",
+      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 167
+      "call_site_line": 155
     },
     {
-      "source": "repeat_last@/home/kacper/Documents/Projects/orchrd/src/controller.rs:188",
-      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "source": "repeat_last@/home/kacper/Documents/Projects/orchrd/src/controller.rs:176",
+      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 189
+      "call_site_line": 177
     },
     {
-      "source": "reply@/home/kacper/Documents/Projects/orchrd/src/controller.rs:177",
-      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "source": "reply@/home/kacper/Documents/Projects/orchrd/src/controller.rs:165",
+      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 178
+      "call_site_line": 166
     },
     {
       "source": "request@/home/kacper/Documents/Projects/orchrd/src/routing.rs:95",
@@ -5416,18 +4812,39 @@
       "call_site_line": 96
     },
     {
-      "source": "resolve_pending@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:861",
+      "source": "rescan_questions@/home/kacper/Documents/Projects/orchrd/src/controller.rs:450",
+      "target": "retry@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:608",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
+      "call_site_line": 451
+    },
+    {
+      "source": "resolve_pending@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:744",
       "target": "now@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/instant.rs:47",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 870
+      "call_site_line": 753
     },
     {
-      "source": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:69",
-      "target": "herdr::parse_roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:493",
+      "source": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:159",
+      "target": "join_next@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/join_set.rs:295",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 71
+      "call_site_line": 184
+    },
+    {
+      "source": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:159",
+      "target": "machines@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:98",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 162
+    },
+    {
+      "source": "roster@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:159",
+      "target": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/join_set.rs:81",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 167
     },
     {
       "source": "routing::payload@/home/kacper/Documents/Projects/orchrd/src/routing.rs:166",
@@ -5458,74 +4875,81 @@
       "call_site_line": 225
     },
     {
-      "source": "routing_questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:314",
-      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:304",
+      "source": "routing_questions@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:454",
+      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:444",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 315
+      "call_site_line": 455
     },
     {
-      "source": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:342",
+      "source": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:330",
       "target": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/join_set.rs:81",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 349
+      "call_site_line": 337
     },
     {
-      "source": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:342",
+      "source": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:330",
       "target": "spawn@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/join_set.rs:141",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 350
+      "call_site_line": 338
     },
     {
-      "source": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:342",
-      "target": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1040",
+      "source": "run@/home/kacper/Documents/Projects/orchrd/src/controller.rs:330",
+      "target": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:917",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 363
+      "call_site_line": 345
     },
     {
-      "source": "run@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:238",
+      "source": "run@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:218",
       "target": "interval::interval@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/time/interval.rs:72",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 239
+      "call_site_line": 219
     },
     {
-      "source": "run@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:42",
+      "source": "run@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:57",
+      "target": "run_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:60",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 58
+    },
+    {
+      "source": "run_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:60",
+      "target": "args@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/process/mod.rs:405",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 64
+    },
+    {
+      "source": "run_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:60",
       "target": "de::from_slice@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.151/src/de.rs:2666",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 56
+      "call_site_line": 82
     },
     {
-      "source": "send@/home/kacper/Documents/Projects/orchrd/src/controller.rs:119",
+      "source": "run_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:60",
+      "target": "new@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/process/mod.rs:316",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 61
+    },
+    {
+      "source": "screen@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:229",
+      "target": "screen_at@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:203",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 231
+    },
+    {
+      "source": "send@/home/kacper/Documents/Projects/orchrd/src/controller.rs:107",
       "target": "send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:815",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 121
-    },
-    {
-      "source": "serve@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:35",
-      "target": "runtime_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:285",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 36
-    },
-    {
-      "source": "serve@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:35",
-      "target": "spawn::spawn@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/task/spawn.rs:173",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs",
-      "call_site_line": 52
-    },
-    {
-      "source": "serve@/home/kacper/Documents/Projects/orchrd/src/agents.rs:32",
-      "target": "serve@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:35",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 34
+      "call_site_line": 109
     },
     {
       "source": "set_announcement_mode@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:36",
@@ -5535,15 +4959,15 @@
       "call_site_line": 40
     },
     {
-      "source": "set_announcement_mode@/home/kacper/Documents/Projects/orchrd/src/controller.rs:185",
-      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "source": "set_announcement_mode@/home/kacper/Documents/Projects/orchrd/src/controller.rs:173",
+      "target": "ask@/home/kacper/Documents/Projects/orchrd/src/controller.rs:122",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 186
+      "call_site_line": 174
     },
     {
       "source": "signal_loop@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:127",
-      "target": "Snapshot@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:64",
+      "target": "Snapshot@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:59",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs",
       "call_site_line": 137
@@ -5591,25 +5015,18 @@
       "call_site_line": 153
     },
     {
-      "source": "snapshot@/home/kacper/Documents/Projects/orchrd/src/agents.rs:38",
-      "target": "poll@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:126",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 41
-    },
-    {
-      "source": "snapshot@/home/kacper/Documents/Projects/orchrd/src/agents.rs:38",
-      "target": "snapshot@/home/kacper/Documents/Projects/orchrd/src/agent_bridge.rs:254",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/agents.rs",
-      "call_site_line": 40
-    },
-    {
-      "source": "snapshot@/home/kacper/Documents/Projects/orchrd/src/controller.rs:116",
+      "source": "snapshot@/home/kacper/Documents/Projects/orchrd/src/controller.rs:104",
       "target": "borrow@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:628",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 117
+      "call_site_line": 105
+    },
+    {
+      "source": "source_for@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:118",
+      "target": "Remote@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:45",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 130
     },
     {
       "source": "speak@/home/kacper/Documents/Projects/orchrd/src/tts.rs:34",
@@ -5626,32 +5043,32 @@
       "call_site_line": 36
     },
     {
-      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1040",
+      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:917",
       "target": "borrow@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:628",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 1047
+      "call_site_line": 924
     },
     {
-      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1040",
+      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:917",
       "target": "cancel@/home/kacper/Documents/Projects/orchrd/src/tts.rs:48",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 1095
+      "call_site_line": 972
     },
     {
-      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1040",
+      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:917",
       "target": "recv@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:242",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 1046
+      "call_site_line": 923
     },
     {
-      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:1040",
+      "source": "speech_worker@/home/kacper/Documents/Projects/orchrd/src/controller.rs:917",
       "target": "speak@/home/kacper/Documents/Projects/orchrd/src/tts.rs:34",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 1080
+      "call_site_line": 957
     },
     {
       "source": "start@/home/kacper/Documents/Projects/orchrd/src/stt.rs:40",
@@ -5668,46 +5085,46 @@
       "call_site_line": 57
     },
     {
-      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
+      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
       "target": "borrow@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/watch.rs:628",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 196
+      "call_site_line": 184
     },
     {
-      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
+      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
       "target": "cancel@/home/kacper/Documents/Projects/orchrd/src/tts.rs:48",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 200
+      "call_site_line": 188
     },
     {
-      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
+      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
       "target": "lock@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mutex.rs:433",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 192
+      "call_site_line": 180
     },
     {
-      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
+      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
       "target": "new_v4@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/uuid-1.26.0/src/v4.rs:32",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 197
+      "call_site_line": 185
     },
     {
-      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
-      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/agents.rs:56",
+      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
+      "target": "question_ids@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:444",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 198
+      "call_site_line": 186
     },
     {
-      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:191",
+      "source": "start_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:179",
       "target": "start@/home/kacper/Documents/Projects/orchrd/src/stt.rs:40",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 201
+      "call_site_line": 189
     },
     {
       "source": "state_changed@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:57",
@@ -5752,46 +5169,46 @@
       "call_site_line": 113
     },
     {
-      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:226",
+      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:214",
       "target": "cancel@/home/kacper/Documents/Projects/orchrd/src/stt.rs:116",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 237
+      "call_site_line": 225
     },
     {
-      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:226",
+      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:214",
       "target": "stop_capture@/home/kacper/Documents/Projects/orchrd/src/stt.rs:91",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 236
+      "call_site_line": 224
     },
     {
-      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:226",
+      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:214",
       "target": "try_send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:923",
-      "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 246
-    },
-    {
-      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:226",
-      "target": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:146",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
       "call_site_line": 234
     },
     {
-      "source": "store@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:215",
-      "target": "terminal_input::permission@/home/kacper/Documents/Projects/orchrd/src/terminal_input.rs:302",
+      "source": "stop_listening@/home/kacper/Documents/Projects/orchrd/src/controller.rs:214",
+      "target": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
       "kind": "DirectCall",
-      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
       "call_site_line": 222
     },
     {
-      "source": "store@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:215",
+      "source": "store@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:355",
+      "target": "terminal_input::permission@/home/kacper/Documents/Projects/orchrd/src/terminal_input.rs:302",
+      "kind": "DirectCall",
+      "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
+      "call_site_line": 362
+    },
+    {
+      "source": "store@/home/kacper/Documents/Projects/orchrd/src/herdr.rs:355",
       "target": "terminal_input::plan@/home/kacper/Documents/Projects/orchrd/src/terminal_input.rs:131",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/herdr.rs",
-      "call_site_line": 224
+      "call_site_line": 364
     },
     {
       "source": "stream_speech@/home/kacper/Documents/Projects/orchrd/src/tts.rs:55",
@@ -5864,11 +5281,11 @@
       "call_site_line": 149
     },
     {
-      "source": "subscribe@/home/kacper/Documents/Projects/orchrd/src/controller.rs:113",
+      "source": "subscribe@/home/kacper/Documents/Projects/orchrd/src/controller.rs:101",
       "target": "subscribe@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/broadcast.rs:721",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 114
+      "call_site_line": 102
     },
     {
       "source": "summarize@/home/kacper/Documents/Projects/orchrd/src/intent.rs:91",
@@ -5941,18 +5358,18 @@
       "call_site_line": 267
     },
     {
-      "source": "trace@/home/kacper/Documents/Projects/orchrd/src/controller.rs:125",
+      "source": "trace@/home/kacper/Documents/Projects/orchrd/src/controller.rs:113",
       "target": "try_send@/home/kacper/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tokio-1.53.1/src/sync/mpsc/bounded.rs:923",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 126
+      "call_site_line": 114
     },
     {
-      "source": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:276",
+      "source": "trace@/home/kacper/Documents/Projects/orchrd/src/coordinator.rs:256",
       "target": "activity::update@/home/kacper/Documents/Projects/orchrd/src/activity.rs:47",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/coordinator.rs",
-      "call_site_line": 277
+      "call_site_line": 257
     },
     {
       "source": "transcript_ready@/home/kacper/Documents/Projects/orchrd/src/bin/orchrdd.rs:59",
@@ -6011,25 +5428,25 @@
       "call_site_line": 163
     },
     {
-      "source": "tts_socket@/home/kacper/Documents/Projects/orchrd/src/config.rs:297",
-      "target": "runtime_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:285",
+      "source": "tts_socket@/home/kacper/Documents/Projects/orchrd/src/config.rs:289",
+      "target": "runtime_dir@/home/kacper/Documents/Projects/orchrd/src/config.rs:277",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/config.rs",
-      "call_site_line": 301
+      "call_site_line": 293
     },
     {
-      "source": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:146",
+      "source": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
       "target": "new@/home/kacper/Documents/Projects/orchrd/src/activity.rs:19",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 156
+      "call_site_line": 144
     },
     {
-      "source": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:146",
-      "target": "trace@/home/kacper/Documents/Projects/orchrd/src/controller.rs:125",
+      "source": "voice@/home/kacper/Documents/Projects/orchrd/src/controller.rs:134",
+      "target": "trace@/home/kacper/Documents/Projects/orchrd/src/controller.rs:113",
       "kind": "DirectCall",
       "call_site_file": "/home/kacper/Documents/Projects/orchrd/src/controller.rs",
-      "call_site_line": 154
+      "call_site_line": 142
     }
   ]
 }

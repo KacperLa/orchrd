@@ -1,16 +1,11 @@
 use crate::activity::{self, Activity};
-use crate::{
-    agent::AgentInfo,
-    config::AnnouncementMode,
-    db::{Database, ResponseJob},
-    tts::concise_speech,
-};
+use crate::{agent::AgentInfo, config::AnnouncementMode, db::Database, tts::concise_speech};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
-    sync::{broadcast, mpsc, oneshot, watch, Notify},
+    sync::{broadcast, mpsc, oneshot, watch},
     time::Instant,
 };
 use uuid::Uuid;
@@ -108,13 +103,6 @@ pub enum Message {
         scope: Scope,
         reply: oneshot::Sender<Result<Snapshot>>,
     },
-    CurrentScope {
-        reply: oneshot::Sender<Scope>,
-    },
-    StructuredResponse {
-        job: ResponseJob,
-        reply: Option<oneshot::Sender<Result<()>>>,
-    },
     Addressed {
         scope: Scope,
         agent_name: String,
@@ -163,11 +151,6 @@ pub enum Message {
         agent_name: String,
         reply: oneshot::Sender<Result<bool>>,
     },
-    Summarized {
-        job: ResponseJob,
-        speech: String,
-        reply: oneshot::Sender<Result<()>>,
-    },
     Begin {
         parent: Option<String>,
         scope: Scope,
@@ -210,7 +193,6 @@ pub struct Coordinator {
     events: broadcast::Sender<Event>,
     snapshots: watch::Sender<Snapshot>,
     speech: mpsc::Sender<Speech>,
-    summaries: Arc<Notify>,
     observations: HashMap<String, Observation>,
     pending: HashMap<String, Pending>,
     voice_token: Option<String>,
@@ -222,7 +204,6 @@ impl Coordinator {
         events: broadcast::Sender<Event>,
         snapshots: watch::Sender<Snapshot>,
         speech: mpsc::Sender<Speech>,
-        summaries: Arc<Notify>,
     ) -> Self {
         Self {
             snapshot,
@@ -230,7 +211,6 @@ impl Coordinator {
             events,
             snapshots,
             speech,
-            summaries,
             observations: HashMap::new(),
             pending: HashMap::new(),
             voice_token: None,
@@ -343,35 +323,6 @@ impl Coordinator {
             }
             Message::Context { scope, reply } => {
                 let _ = reply.send(self.check_scope(&scope).map(|_| self.snapshot.clone()));
-            }
-            Message::CurrentScope { reply } => {
-                let _ = reply.send(self.snapshot.scope.clone());
-            }
-            Message::StructuredResponse { job, reply } => {
-                let result = (|| {
-                    self.db.capture(&job)?;
-                    if job.session == self.snapshot.scope.session
-                        && job.epoch == self.snapshot.scope.epoch
-                    {
-                        self.trace(
-                            Activity::new(
-                                job.id.clone(),
-                                "summary",
-                                "queued",
-                                false,
-                                json!({"output":job.output}),
-                            )
-                            .linked(None, Some(job.agent_name.clone())),
-                        );
-                    }
-                    self.summaries.notify_one();
-                    Ok(())
-                })();
-                if let Some(reply) = reply {
-                    let _ = reply.send(result);
-                } else {
-                    result?;
-                }
             }
             Message::Addressed {
                 scope,
@@ -611,74 +562,6 @@ impl Coordinator {
                     self.snapshot.message = Some(speech.clone());
                     self.queue_speech(&scope, question.question_id, speech, false)?;
                     Ok(true)
-                })();
-                let _ = reply.send(result);
-            }
-            Message::Summarized { job, speech, reply } => {
-                let speech = if job.kind == "agent_question" {
-                    crate::tts::plain_speech(&speech)
-                } else {
-                    concise_speech(&speech)
-                };
-                let result = (|| {
-                    if !self.db.finish_response(&job, &speech)? {
-                        return Ok(());
-                    }
-                    let scope = Scope {
-                        session: job.session.clone(),
-                        epoch: job.epoch.clone(),
-                    };
-                    if scope == self.snapshot.scope {
-                        self.trace(Activity::new(
-                            &job.id,
-                            "summary",
-                            "recorded",
-                            true,
-                            json!({"speech":speech}),
-                        ));
-                        self.snapshot.message = Some(speech.clone());
-                        if self
-                            .snapshot
-                            .agents
-                            .iter()
-                            .any(|a| a.name == job.agent_name)
-                        {
-                            self.snapshot.active_agent = Some(job.agent_name.clone());
-                        }
-                        if let Some(question) =
-                            serde_json::from_str::<crate::question::Question>(&job.output)
-                                .ok()
-                                .filter(|q| {
-                                    job.kind == "agent_question" && q.question_kind == "permission"
-                                })
-                        {
-                            let id=json!({"scope":scope,"agent_name":job.agent_name,"instance_id":job.instance_id,"question_id":question.question_id}).to_string();
-                            let _ = self.events.send(Event::Approval {
-                                id,
-                                message: speech.clone(),
-                            });
-                        } else {
-                            let _ = self.events.send(Event::Completion {
-                                agent_name: job.agent_name.clone(),
-                                speech: speech.clone(),
-                            });
-                        }
-                        if self.snapshot.announcement_mode == AnnouncementMode::Auto {
-                            self.queue_speech(&scope, job.id.clone(), speech, true)?;
-                        } else {
-                            self.trace(
-                                Activity::new(
-                                    format!("{}/speech", job.id),
-                                    "speech",
-                                    "muted",
-                                    true,
-                                    json!({"text":speech}),
-                                )
-                                .linked(Some(job.id.clone()), Some(job.agent_name.clone())),
-                            );
-                        }
-                    }
-                    Ok(())
                 })();
                 let _ = reply.send(result);
             }
@@ -1091,31 +974,6 @@ mod tests {
         c.publish();
     }
     #[test]
-    fn approval_notification_contains_exact_question_id() {
-        let (mut c, _audio) = fixture();
-        let mut events = c.events.subscribe();
-        let job = ResponseJob {
-            id: "permission-job".into(), session: c.snapshot.scope.session.clone(), epoch: c.snapshot.scope.epoch.clone(),
-            agent_name: "coder".into(), instance_id: "pane".into(), kind: "agent_question".into(),
-            output: json!({"question_id":"exact","question_kind":"permission","title":"Approval","body":"Write?","options":[],"multiple":false,"allow_custom":false}).to_string(), speech: None,
-        };
-        c.db.capture(&job).unwrap();
-        let (reply, mut received) = oneshot::channel();
-        c.handle(Message::Summarized {
-            job,
-            speech: "Write?".into(),
-            reply,
-        })
-        .unwrap();
-        received.try_recv().unwrap().unwrap();
-        let Event::Approval { id, .. } = events.try_recv().unwrap() else {
-            panic!("expected approval")
-        };
-        let reference: Value = serde_json::from_str(&id).unwrap();
-        assert_eq!(reference["question_id"], "exact");
-        assert_eq!(reference["instance_id"], "pane");
-    }
-    #[test]
     fn another_question_records_answer_without_claiming_work_resumed() {
         assert_eq!(
             operation_evidence(
@@ -1161,14 +1019,7 @@ mod tests {
         let (snapshots, _) = watch::channel(snapshot.clone());
         let (speech, rx) = mpsc::channel(256);
         (
-            Coordinator::new(
-                snapshot,
-                db,
-                events,
-                snapshots,
-                speech,
-                Arc::new(Notify::new()),
-            ),
+            Coordinator::new(snapshot, db, events, snapshots, speech),
             rx,
         )
     }
@@ -1254,102 +1105,6 @@ mod tests {
             operation_evidence(OperationKind::Send, &agent("idle", 1), &agent("unknown", 2))
                 .is_none()
         );
-    }
-    #[test]
-    fn structured_responses_are_queued_once_without_waiting_for_summary() {
-        let (mut c, mut audio) = fixture();
-        let scope = c.snapshot.scope.clone();
-        for (number, expected) in ["First result", "Second result"].iter().enumerate() {
-            c.handle(Message::StructuredResponse {
-                job: ResponseJob {
-                    id: number.to_string(),
-                    session: scope.session.clone(),
-                    epoch: scope.epoch.clone(),
-                    agent_name: "coder".into(),
-                    instance_id: "pane".into(),
-                    kind: "agent_response".into(),
-                    output: (*expected).into(),
-                    speech: None,
-                },
-                reply: None,
-            })
-            .unwrap();
-        }
-        for expected in ["First result", "Second result"] {
-            let job = c.db.next_response().unwrap().unwrap();
-            assert_eq!(job.output, expected);
-            let (reply, mut rx) = oneshot::channel();
-            c.handle(Message::Summarized {
-                job,
-                speech: expected.into(),
-                reply,
-            })
-            .unwrap();
-            rx.try_recv().unwrap().unwrap();
-            assert_eq!(audio.try_recv().unwrap().text, expected);
-        }
-        assert!(c.db.next_response().unwrap().is_none());
-        assert_eq!(c.db.history(CONVERSATION_SESSION, 20).unwrap().len(), 2);
-    }
-    #[test]
-    fn response_from_another_connected_agent_updates_followup_context() {
-        let (mut c, _) = fixture();
-        let mut reviewer = agent("working", 1);
-        reviewer.name = "reviewer".into();
-        reviewer.instance_id = "reviewer-instance".into();
-        c.observe(c.snapshot.scope.clone(), vec![agent("idle", 1), reviewer])
-            .unwrap();
-        let (id, _) = begin(&mut c, OperationKind::Send);
-        c.handle(Message::Delivered { id, result: Ok(()) }).unwrap();
-        assert_eq!(c.snapshot.active_agent.as_deref(), Some("coder"));
-        let scope = c.snapshot.scope.clone();
-        let job = ResponseJob {
-            id: "reviewer-result".into(),
-            session: scope.session.clone(),
-            epoch: scope.epoch,
-            agent_name: "reviewer".into(),
-            instance_id: "reviewer-instance".into(),
-            kind: "agent_response".into(),
-            output: "Tests pass".into(),
-            speech: None,
-        };
-        c.handle(Message::StructuredResponse {
-            job: job.clone(),
-            reply: None,
-        })
-        .unwrap();
-        let (reply, _) = oneshot::channel();
-        c.handle(Message::Summarized {
-            job,
-            speech: "Tests pass".into(),
-            reply,
-        })
-        .unwrap();
-        assert_eq!(c.snapshot.active_agent.as_deref(), Some("reviewer"));
-    }
-    #[test]
-    fn stale_response_keeps_history_but_suppresses_old_speech() {
-        let (mut c, mut audio) = fixture();
-        let job = ResponseJob {
-            id: "old".into(),
-            session: CONVERSATION_SESSION.into(),
-            epoch: "previous-controller-lifetime".into(),
-            agent_name: "coder".into(),
-            instance_id: "pane".into(),
-            kind: "agent_response".into(),
-            output: "Finished".into(),
-            speech: None,
-        };
-        c.db.capture(&job).unwrap();
-        let (reply, _) = oneshot::channel();
-        c.handle(Message::Summarized {
-            job,
-            speech: "Finished".into(),
-            reply,
-        })
-        .unwrap();
-        assert!(audio.try_recv().is_err());
-        assert_eq!(c.db.history(CONVERSATION_SESSION, 20).unwrap().len(), 1);
     }
     #[test]
     fn addressed_agent_updates_context_without_changing_status() {

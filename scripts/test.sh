@@ -33,10 +33,6 @@ exec nix develop "path:$repo_root" --command bash -euo pipefail -c '
     env -u GI_TYPELIB_PATH -u GIO_EXTRA_MODULES -u GIO_MODULE_DIR \
         gjs extension/test-lifecycle.js
 
-    echo "Running coding-agent adapter tests..."
-    env -u PYTHONPATH -u PYTHONHOME \
-        "$ORCHRD_BRIDGE_PYTHON" -m unittest discover -s adapters
-
     echo "Running TTS worker tests..."
     env -u PYTHONPATH -u PYTHONHOME \
         "$ORCHRD_TEST_PYTHON" -m unittest discover -s tts

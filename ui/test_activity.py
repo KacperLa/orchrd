@@ -80,7 +80,7 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(lane_label(snap, None), "Orchrd")
         snap["agents"][1]["display_name"] = "Builder"
         self.assertEqual(lane_names(snap), [None, "w1:p1", "w2:p1"])
-        self.assertEqual(lane_label(snap, "w2:p1"), "Builder (w2:p1)")
+        self.assertEqual(lane_label(snap, "w2:p1"), "Builder")
         snap["agents"][0]["display_name"] = "Renamed"
         self.assertEqual(lane_label(snap, "w1:p1"), "Renamed")
         self.assertEqual(lane_label(snap, "missing"), "missing")

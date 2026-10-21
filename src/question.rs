@@ -1,4 +1,4 @@
-//! A live question bound to a frontend event or a current terminal capture.
+//! A live question bound to a current Herdr terminal capture.
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
