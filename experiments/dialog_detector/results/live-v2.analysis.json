@@ -1,0 +1,41 @@
+{
+  "attempts": 12,
+  "unique_cases": 4,
+  "fields": {
+    "classification": {
+      "passed": 9,
+      "total": 12
+    },
+    "route": {
+      "passed": 9,
+      "total": 12
+    }
+  },
+  "exact_passes": 9,
+  "cases_passing_all_repeats": 2,
+  "false_modal_routes": 0,
+  "false_conversation_routes": 0,
+  "expected_modal_routes": 6,
+  "missed_modal_routes": 1,
+  "expected_conversation_routes": 0,
+  "missed_conversation_routes": 0,
+  "errors": {
+    "TimeoutError": 3
+  },
+  "median_response_seconds_excluding_errors": 3.85,
+  "max_response_seconds": 7.359,
+  "confusion": {
+    "modal_dialog": {
+      "modal_dialog": 5,
+      "error": 1
+    },
+    "no_question": {
+      "no_question": 4,
+      "error": 2
+    }
+  },
+  "failed_cases": [
+    "live-codex-idle-detector-full",
+    "live-codex-permission-detector-full"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "attempts": 56,
+  "unique_cases": 28,
+  "exact_passes": 37,
+  "core_passes": 49,
+  "valid_outputs": 49,
+  "cases_passing_all_repeats": 14,
+  "false_active": 0,
+  "unsupported_control_inferences": 0,
+  "errors": {
+    "TimeoutError": 4
+  },
+  "median_response_seconds_excluding_errors": 21.298,
+  "max_response_seconds": 59.989,
+  "fields": {
+    "status": {
+      "passed": 50,
+      "total": 56
+    },
+    "purpose": {
+      "passed": 52,
+      "total": 56
+    },
+    "input_mode": {
+      "passed": 51,
+      "total": 56
+    },
+    "labels": {
+      "passed": 52,
+      "total": 56
+    },
+    "interaction.method": {
+      "passed": 50,
+      "total": 56
+    },
+    "interaction.selected_index": {
+      "passed": 52,
+      "total": 56
+    },
+    "allows_custom_answer": {
+      "passed": 44,
+      "total": 56
+    },
+    "complete": {
+      "passed": 51,
+      "total": 56
+    },
+    "shortcuts": {
+      "passed": 6,
+      "total": 6
+    },
+    "effects": {
+      "passed": 4,
+      "total": 4
+    }
+  },
+  "failure_categories": {
+    "interaction.method": 2,
+    "allows_custom_answer": 8,
+    "validation": 3,
+    "TimeoutError": 4,
+    "status": 2,
+    "input_mode": 1,
+    "complete": 1
+  },
+  "failed_cases": [
+    "ansi_selection_lost",
+    "error_screen",
+    "injection_in_tool_output",
+    "instruction_in_question",
+    "letter_hotkeys",
+    "multi_question_form",
+    "multiple_no_controls",
+    "ordinary_shell",
+    "paged_menu",
+    "permission_confirmation",
+    "permission_without_controls",
+    "persistent_approval",
+    "question_while_working",
+    "two_questions_latest"
+  ]
+}

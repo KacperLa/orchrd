@@ -25,6 +25,7 @@ async fn main() -> Result<()> {
         "stop" => proxy.call::<_, _, ()>("StopListening", &()).await?,
         "cancel" => proxy.call::<_, _, ()>("CancelListening", &()).await?,
         "repeat-last" => proxy.call::<_, _, ()>("RepeatLast", &()).await?,
+        "rescan" => proxy.call::<_, _, ()>("RescanQuestions", &()).await?,
         "mode" => {
             let mode = args
                 .get(1)
@@ -50,7 +51,7 @@ async fn main() -> Result<()> {
                 .call::<_, _, ()>("DispatchText", &(text.as_str(),))
                 .await?
         }
-        _ => bail!("usage: orchrdctl [doctor [CONFIG]|status|start|stop|cancel|repeat-last|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
+        _ => bail!("usage: orchrdctl [doctor [CONFIG]|status|rescan|start|stop|cancel|repeat-last|mode auto|mode muted|approve ID|deny ID|dispatch TEXT]"),
     };
     Ok(())
 }

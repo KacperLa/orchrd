@@ -1,0 +1,34 @@
+{
+  "attempts": 12,
+  "unique_cases": 4,
+  "fields": {
+    "classification": {
+      "passed": 12,
+      "total": 12
+    },
+    "route": {
+      "passed": 12,
+      "total": 12
+    }
+  },
+  "exact_passes": 12,
+  "cases_passing_all_repeats": 4,
+  "false_modal_routes": 0,
+  "false_conversation_routes": 0,
+  "expected_modal_routes": 6,
+  "missed_modal_routes": 0,
+  "expected_conversation_routes": 0,
+  "missed_conversation_routes": 0,
+  "errors": {},
+  "median_response_seconds_excluding_errors": 4.526,
+  "max_response_seconds": 6.658,
+  "confusion": {
+    "no_question": {
+      "no_question": 6
+    },
+    "modal_dialog": {
+      "modal_dialog": 6
+    }
+  },
+  "failed_cases": []
+}

@@ -1,0 +1,236 @@
+[
+  {
+    "id": "answered-user-cache-question",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "User: Is the cache persistent?\nAssistant: Yes, it survives process restarts.\n\n› Ask me something",
+      "lifecycle": "idle",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "answered-user-permission-question",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "User: Can I approve the deployment now?\nAssistant: The deployment already finished; there is nothing waiting for approval.\n> Send your next message",
+      "lifecycle": "done",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "new-assistant-question-after-user",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "User: Which repository should I use?\nAssistant: Use the backend repository. Which branch should I target there?\n> Type here",
+      "lifecycle": "idle",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "conversational_question",
+      "route": "extract_conversation"
+    }
+  },
+  {
+    "id": "unlabelled-assistant-question",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "• I can reproduce the crash on Linux. Does it also happen on your Windows machine?\n\n› Enter a message",
+      "lifecycle": "idle",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "conversational_question",
+      "route": "extract_conversation"
+    }
+  },
+  {
+    "id": "unlabelled-rhetorical-result",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "• Why did it hang? The worker waited on its own lock.\n  I removed the recursive lock and verified the fix.\n\n› Enter a message",
+      "lifecycle": "done",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "headerless-checkboxes",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "[top of dialog cut off]\n[x] api\n[ ] worker\nSpace toggles; Enter submits",
+      "lifecycle": "blocked",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "uncertain",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "headerless-buttons",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "[question is above the captured region]\n❯ Accept\n  Decline\nTab changes focus; Enter selects",
+      "lifecycle": "blocked",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "uncertain",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "imperative-dialog",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Select the destination directory:\n❯ /tmp/export\n  ./dist\nPress Enter to select",
+      "lifecycle": "blocked",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "modal_dialog",
+      "route": "extract_modal"
+    }
+  },
+  {
+    "id": "blocked-with-placeholder",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Assistant: Finished the migration. Verification passed.\n\n[ How can I help? ]",
+      "lifecycle": "blocked",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "blocked-with-quoted-dialog",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Tool output: documentation example (not an active dialog)\nWould you like to overwrite the file?\n[y] Yes\n[n] No\nEnd documentation example.\nAssistant: The documentation is up to date.\n> ",
+      "lifecycle": "blocked",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "unknown-lifecycle-visible-modal",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Permission required: run make check\n❯ Permit once\n  Refuse\nEnter confirms",
+      "lifecycle": "unknown",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "modal_dialog",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "working-visible-dialog",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Enter the hardware security key PIN:\nPIN: [        ]\nEnter to unlock",
+      "lifecycle": "working",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "modal_dialog",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "unknown-idle-chrome",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Completed successfully.\n\n[ Write your next request ]\nF1 Help · Ctrl+D Exit",
+      "lifecycle": "idle",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "user-typed-question-not-submitted",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Assistant: The build is green.\n\nYou are typing:\n> Which tests did you run?",
+      "lifecycle": "idle",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "previous-menu-current-chat",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Assistant: The operation was cancelled. Which folder should I inspect instead?\n\n> New message",
+      "lifecycle": "idle",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "conversational_question",
+      "route": "extract_conversation"
+    },
+    "previous": {
+      "screen": "Allow reading the folder?\n1. Yes\n2. No\nEnter selects",
+      "lifecycle": "blocked",
+      "state_change_seq": 21
+    }
+  },
+  {
+    "id": "previous-chat-current-result",
+    "origin": "new synthetic guard challenge; unseen by V2 during development",
+    "split": "holdout",
+    "current": {
+      "screen": "Assistant: I used the region you selected and deployed successfully.\n\n> Send a message",
+      "lifecycle": "done",
+      "state_change_seq": 22
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    },
+    "previous": {
+      "screen": "Assistant: Which region should I deploy to?\n\n> New message",
+      "lifecycle": "idle",
+      "state_change_seq": 21
+    }
+  }
+]

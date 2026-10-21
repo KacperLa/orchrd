@@ -282,7 +282,7 @@ impl AgentBridge {
     pub(crate) async fn question(&self, id: &str) -> Option<crate::question::Question> {
         self.0.lock().await.get(id).and_then(|p| p.question.clone())
     }
-    pub(crate) async fn permission_ids(&self) -> HashMap<String, String> {
+    pub(crate) async fn question_ids(&self) -> HashMap<String, String> {
         self.0
             .lock()
             .await
@@ -290,7 +290,6 @@ impl AgentBridge {
             .filter_map(|(id, peer)| {
                 peer.question
                     .as_ref()
-                    .filter(|q| q.question_kind == "permission")
                     .map(|q| (id.clone(), q.question_id.clone()))
             })
             .collect()

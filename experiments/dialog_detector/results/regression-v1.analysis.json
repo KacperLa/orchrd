@@ -1,0 +1,45 @@
+{
+  "attempts": 36,
+  "unique_cases": 36,
+  "fields": {
+    "classification": {
+      "passed": 34,
+      "total": 36
+    },
+    "route": {
+      "passed": 34,
+      "total": 36
+    }
+  },
+  "exact_passes": 34,
+  "cases_passing_all_repeats": 34,
+  "false_modal_routes": 1,
+  "false_conversation_routes": 0,
+  "expected_modal_routes": 24,
+  "missed_modal_routes": 0,
+  "expected_conversation_routes": 1,
+  "missed_conversation_routes": 0,
+  "errors": {},
+  "median_response_seconds_excluding_errors": 1.895,
+  "max_response_seconds": 2.146,
+  "confusion": {
+    "modal_dialog": {
+      "modal_dialog": 24
+    },
+    "no_question": {
+      "no_question": 8,
+      "uncertain": 1
+    },
+    "uncertain": {
+      "modal_dialog": 1,
+      "uncertain": 1
+    },
+    "conversational_question": {
+      "conversational_question": 1
+    }
+  },
+  "failed_cases": [
+    "reg-missing_top",
+    "reg-question_while_working"
+  ]
+}

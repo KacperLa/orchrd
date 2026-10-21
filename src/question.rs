@@ -1,4 +1,4 @@
-//! A live, bound question from a frontend. Never inferred from transcript history.
+//! A live question bound to a frontend event or a current terminal capture.
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -28,8 +28,8 @@ pub(crate) enum Answer {
 }
 impl Question {
     pub fn validate(&self, answer: &Answer) -> Result<()> {
-        if self.question_kind != "question" {
-            bail!("this is a permission request, not a question");
+        if !matches!(self.question_kind.as_str(), "question" | "permission") {
+            bail!("unknown question kind");
         }
         match answer {
             Answer::Choices { option_ids } => {
@@ -44,7 +44,11 @@ impl Question {
                 }
             }
             Answer::Custom { text } => {
-                if !self.allow_custom || text.trim().is_empty() || text.len() > 16_000 {
+                if self.question_kind == "permission"
+                    || !self.allow_custom
+                    || text.trim().is_empty()
+                    || text.len() > 16_000
+                {
                     bail!("custom answer is unavailable or invalid");
                 }
             }

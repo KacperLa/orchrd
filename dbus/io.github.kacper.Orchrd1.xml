@@ -4,6 +4,7 @@
     <method name="StartListening"/><method name="StopListening"/><method name="CancelListening"/>
     <method name="DispatchText"><arg name="text" type="s" direction="in"/></method>
     <method name="RepeatLast"/>
+    <method name="RescanQuestions"/>
     <method name="SetAnnouncementMode"><arg name="mode" type="s" direction="in"/></method>
     <method name="Approve"><arg name="id" type="s" direction="in"/><arg name="approve" type="b" direction="in"/></method>
     <method name="GetSnapshot"><arg name="json" type="s" direction="out"/></method>

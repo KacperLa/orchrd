@@ -1,0 +1,47 @@
+{
+  "attempts": 72,
+  "unique_cases": 24,
+  "fields": {
+    "classification": {
+      "passed": 63,
+      "total": 72
+    },
+    "route": {
+      "passed": 66,
+      "total": 72
+    }
+  },
+  "exact_passes": 63,
+  "cases_passing_all_repeats": 21,
+  "false_modal_routes": 3,
+  "false_conversation_routes": 3,
+  "expected_modal_routes": 15,
+  "missed_modal_routes": 0,
+  "expected_conversation_routes": 9,
+  "missed_conversation_routes": 0,
+  "errors": {},
+  "median_response_seconds_excluding_errors": 1.905,
+  "max_response_seconds": 2.309,
+  "confusion": {
+    "modal_dialog": {
+      "modal_dialog": 21
+    },
+    "conversational_question": {
+      "conversational_question": 12
+    },
+    "no_question": {
+      "conversational_question": 3,
+      "no_question": 27
+    },
+    "uncertain": {
+      "modal_dialog": 3,
+      "no_question": 3,
+      "uncertain": 3
+    }
+  },
+  "failed_cases": [
+    "blocked-only-status",
+    "chat-question-user-authored",
+    "truncated-header"
+  ]
+}

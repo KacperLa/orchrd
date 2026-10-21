@@ -1,0 +1,43 @@
+{
+  "detection_model": "decision",
+  "extraction_model": "bean",
+  "extraction_mode": "fresh",
+  "cases_sha256": "011aeabc1ac40ccd86afd4ca9802c7e89131ec8cf5f59a0df5e835ab93fb702e",
+  "source_sha256": {
+    "source_detector.py": "c468467a8d32104e33a01a6074ceeff95521aff4b98302bce6c77e4961bca16c",
+    "detector.py": "bd15b0d5642f6cc8391e127bd44a0c262365566fd7a12ff1f747be6e6a774cd5",
+    "pipeline.py": "ef4430fea0cee5d16d30404274b59e64cc964600531826a7a5592d574b4aaace"
+  },
+  "extractor_sha256": "83a5defd60b9f95fdb3cf4ef6d06576b5d00702040ffb822b683cba24c0e2211",
+  "origins": [
+    "recorded private Codex capture, bottom 30 lines"
+  ],
+  "attempts": 4,
+  "unique_cases": 2,
+  "outcome_matches": 4,
+  "exact_passes": 4,
+  "expected_questions": 2,
+  "available_expected_questions": 2,
+  "false_available_questions": 0,
+  "expected_ignored": 2,
+  "correctly_ignored": 2,
+  "extractor_invocations": 2,
+  "outcomes": {
+    "question_available": 2,
+    "ignore": 2
+  },
+  "reasons": {
+    "grounded_complete_question": 2,
+    "no_current_request": 2
+  },
+  "errors": {},
+  "median_end_to_end_seconds": 29.916,
+  "failed_cases": [],
+  "extractor_api_calls": 2,
+  "capture_note": "Two previously recorded private Codex screens cropped to their bottom 30 lines; two fresh model attempts each. Raw captures, annotations and extraction responses are retained only in /tmp.",
+  "checked_fields_note": "Outcome; for the approval also purpose, input mode, three options and their ordered permission effects. Shortcut suffix formatting is not graded as label semantics.",
+  "median_seconds_by_outcome": {
+    "question_available": 57.645,
+    "ignore": 2.285
+  }
+}

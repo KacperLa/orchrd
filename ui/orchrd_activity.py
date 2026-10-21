@@ -70,6 +70,11 @@ class ActivityWindow(Gtk.ApplicationWindow):
         self.set_child(root)
         self.status = Gtk.Label(label="Connecting to Orchrd…", xalign=0)
         root.append(self.status)
+        self.questions = Gtk.Label(xalign=0, wrap=True, selectable=True)
+        self.questions_panel = Gtk.Expander(label="Agent questions")
+        self.questions_panel.set_child(self.questions)
+        self.questions_panel.set_expanded(True)
+        root.append(self.questions_panel)
         legend = Gtk.Label(label="Blue / working    Gray / idle    Green / done    Amber / blocked or uncertain    Red / failed", xalign=0)
         legend.add_css_class("dim-label")
         root.append(legend)
@@ -161,6 +166,15 @@ class ActivityWindow(Gtk.ApplicationWindow):
 
     def render(self):
         self.syncing = True
+        requests = []
+        for value in self.snapshot.get("observed_questions", []):
+            question = value["question"]
+            lines = [lane_label(self.snapshot, value["agent_name"]), question["body"]]
+            lines.extend(f"{index + 1}. {option['label']}" for index, option in enumerate(question.get("options", [])))
+            lines.append("Answer in the terminal; controls are not established." if value.get("read_only") else "Reply by voice or in the agent terminal.")
+            requests.append("\n".join(lines))
+        self.questions.set_text("\n\n".join(requests))
+        self.questions_panel.set_visible(bool(requests))
         records = self.snapshot.get("activity", [])
         self.choices.set_model(Gtk.StringList.new([f'{action_title(a["kind"])} · {a["state"]} · {lane_label(self.snapshot, a.get("agent_name"))}' for a in records]))
         index = next((i for i, a in enumerate(records) if a["id"] == self.selected), None)

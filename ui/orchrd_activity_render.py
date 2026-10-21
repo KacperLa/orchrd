@@ -15,6 +15,7 @@ ACTION_GLYPHS = {
     "respond_to_agent": ("shield", "Approve or deny"),
     "cancel_agent": ("stop", "Cancel agent"),
     "summary": ("document", "Summarize output"),
+    "dialog": ("question", "Read question"),
     "speech": ("speaker", "Speak"),
     "agent_status": ("pulse", "Agent status transition"),
     "monitor": ("radar", "Toad monitoring"),
@@ -68,6 +69,11 @@ def draw_glyph(cr, kind, x, y):
         cr.curve_to(17, 22, 7, 22, 2, 12)
         cr.stroke()
         circle(12, 12, 3)
+    elif glyph == "question":
+        rect(3, 3, 18, 14)
+        line((7, 17), (7, 22), (12, 17))
+        line((10, 7), (14, 7), (14, 10), (12, 10), (12, 12))
+        circle(12, 14, 0.5)
     elif glyph == "plane":
         line((3, 10), (22, 2), (14, 22), (10, 14), (3, 10))
         line((10, 14), (22, 2))

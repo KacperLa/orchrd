@@ -25,12 +25,12 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
-    home.sessionVariables = lib.mkIf cfg.enableCodex {
+    home.sessionVariables = lib.mkIf (cfg.enableCodex || cfg.startCodexServer) {
       ORCHRD_CODEX_SOCKET = codexSocket;
       ORCHRD_CODEX_COMMAND = cfg.codexCommand;
     };
 
-    systemd.user.services.orchrd-codex-server = lib.mkIf (cfg.enableCodex && cfg.startCodexServer) {
+    systemd.user.services.orchrd-codex-server = lib.mkIf cfg.startCodexServer {
       Unit = {
         Description = "Shared local Codex app server for Orchard and the terminal";
         PartOf = [ "graphical-session.target" ];

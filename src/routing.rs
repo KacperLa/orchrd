@@ -55,9 +55,10 @@ impl Router {
         questions: Value,
     ) -> Result<(Decision, Value)> {
         let mut body = payload(&self.settings.model, text, agents);
-        body["state"]["pending_questions"] = questions;
+        body["state"]["pending_questions"] = operation_questions(&questions);
         let result = self.request(&body).await?;
-        let decision = resolve(&result, agents, active)?;
+        let target = pending_target(&result, &questions)?.or(active);
+        let decision = resolve(&result, agents, target)?;
         Ok((decision, result))
     }
     pub async fn answer_question(
@@ -88,18 +89,66 @@ impl Router {
         }
     }
 
-    async fn request(&self, body: &Value) -> Result<Value> {
+    pub(crate) fn model(&self) -> &str {
+        &self.settings.model
+    }
+
+    pub(crate) async fn request(&self, body: &Value) -> Result<Value> {
         let mut request = self.http.post(&self.settings.endpoint).json(body);
         if !self.settings.api_key.is_empty() {
             request = request.bearer_auth(&self.settings.api_key);
         }
-        let response = request.send().await.context("call routing service")?;
+        let response = request
+            .send()
+            .await
+            .map_err(|error| error.without_url())
+            .context("call routing service")?;
         if !response.status().is_success() {
             bail!("routing service returned HTTP {}", response.status());
         }
         let result: Value = response.json().await.context("decode routing response")?;
         Ok(result)
     }
+}
+fn pending_target<'a>(response: &Value, questions: &'a Value) -> Result<Option<&'a str>> {
+    let operation = choice(response, "operation")?;
+    if !matches!(operation, "answer_question" | "approve" | "deny")
+        || choice(response, "explicit_target")? != "unspecified"
+    {
+        return Ok(None);
+    }
+    let mut targets = std::collections::HashSet::new();
+    if let Some(questions) = questions.as_array() {
+        for question in questions {
+            if matches!(operation, "approve" | "deny")
+                && question["question"]["question_kind"] != "permission"
+            {
+                continue;
+            }
+            if let Some(id) = question["agent_id"].as_str() {
+                targets.insert(id);
+            }
+        }
+    }
+    Ok(if targets.len() == 1 {
+        targets.into_iter().next()
+    } else {
+        None
+    })
+}
+fn operation_questions(questions: &Value) -> Value {
+    // A pending permission's command/body must not turn a new work request into
+    // approval merely because its words match. Keep only permission presence
+    // and scope/option numbers here. Answer selection gets the full question.
+    json!(questions.as_array().into_iter().flatten().map(|item| {
+        if item["question"]["question_kind"] != "permission" { return item.clone(); }
+        let options = item["question"]["options"].as_array().into_iter().flatten().enumerate()
+            .map(|(index,option)| json!({"number":index+1,"effect":match option["description"].as_str() {
+                Some("allow_once")=>"allow_once",Some("allow_persistent")=>"allow_persistent",Some("deny")=>"deny",_=>"unknown"
+            }})).collect::<Vec<_>>();
+        json!({"agent_id":item["agent_id"],"agent_name":item["agent_name"],"question":{
+            "question_kind":"permission","options":options,"allow_custom":false}})
+    }).collect::<Vec<_>>())
 }
 fn names(agents: &[AgentInfo]) -> Vec<String> {
     let mut names = Vec::new();
@@ -124,13 +173,13 @@ pub(crate) fn payload(model: &str, text: &str, agents: &[AgentInfo]) -> Value {
     targets.insert("unspecified".into(), json!("meaning: The utterance names no agent. References such as it, the agent, and you are not explicit agent names."));
     targets.insert("unknown".into(), json!("meaning: The utterance names an agent whose name is absent from available_agent_names."));
     json!({"model":model,"state":{"utterance":text,"available_agent_names":names},"questions":{
-        "operation":{"type":"choice","instructions":"What kind of request is expressed in `utterance`? Classify its meaning; agent availability is handled separately.","criteria":{
-            "answer_question":"Answer a pending question in pending_questions: select offered choices, give a custom reply, or correct what the agent understood. Examples: Option two., Both the first and third., I meant check my email, not the code. Use only when a question is pending.",
+        "operation":{"type":"choice","instructions":"What kind of request is expressed in utterance? Classify the user's speech act, not the task described by a pending question. Pending questions provide context for answer_question only. A request to give an agent work is send_to_agent, even when that work needs permission. Never treat 'Ask Builder to run the tests' as approval. Approve and deny require a permission decision; agent availability is handled separately.","criteria":{
+            "answer_question":"Answer a pending question in pending_questions: select offered choices, give a custom reply, or correct what the agent understood. Examples: Option two., Both the first and third., I meant check my email, not the code. Explicitly selecting persistent permission (Always allow, do not ask again) is answer_question, not generic approve. Use only when a question is pending.",
             "send_to_agent":"meaning: Give a coding agent work, a question to investigate, or feedback about its task. excludes: Asking for the agent's existing progress or results; replaying Orchard speech. examples: Check my emails., Run the tests again., That label is fine., What is HTTP?",
             "read_agent":"meaning: Retrieve a coding agent's existing progress, current activity, or results. excludes: Asking the agent to perform new work or investigate a new question. examples: What is Reviewer doing?, Has it finished?, What did it find?",
             "repeat_last":"meaning: Replay what Orchard just said because the user wants to hear it again. excludes: Asking an agent to repeat a task. examples: Say that again., I did not hear you.",
             "clarify":"meaning: The utterance contains no identifiable task, question, task feedback, status request, or speech replay request. examples: Hello!",
-            "approve":"Allow an agent's pending permission request. Examples: Approve it., Allow that tool call. Task feedback belongs to send_to_agent.",
+            "approve":"Allow an agent's pending permission request once. Examples: Approve it., Allow that tool call., Allow it once. Explicit persistent permission selection belongs to answer_question. A request to perform work or task feedback belongs to send_to_agent.",
             "deny":"Reject an agent's pending permission request. Examples: Deny that permission., Do not allow that tool call.",
             "cancel":"Stop the selected agent's current work. Examples: Cancel its task., Tell Reviewer to stop working. Replaying speech belongs to repeat_last."
         }},
@@ -210,6 +259,12 @@ pub(crate) fn resolve(
 
 pub(crate) fn acknowledgement(operation: Operation, name: &str, receipt: &Value) -> String {
     if receipt["delivery"] != "accepted" {
+        if let Some(error) = receipt["error"].as_str() {
+            return format!(
+                "Delivery to {name} is unconfirmed: {}. I haven't retried it.",
+                crate::intent::redact(error)
+            );
+        }
         return format!("I couldn't confirm delivery to {name}. I haven't retried it.");
     }
     match (operation, receipt["outcome"].as_str().unwrap_or_default()) {
@@ -232,6 +287,77 @@ pub(crate) fn acknowledgement(operation: Operation, name: &str, receipt: &Value)
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "calls the configured System One service; synthetic questions only, never sends agent input"]
+    async fn configured_service_routes_herdr_controls() {
+        let config = crate::config::Config::load(None).unwrap();
+        let router = Router::new(&config.routing).unwrap();
+        let roster = vec![agent("pane", "Builder")];
+        let pending = json!([{"agent_id":"pane","agent_name":"Builder","question":{
+            "question_id":"synthetic-permission","question_kind":"permission","title":"Run a command?",
+            "body":"Run the tests?","options":[{"id":"once","label":"Allow once","description":"allow_once"},
+                {"id":"always","label":"Always allow","description":"allow_persistent"},
+                {"id":"deny","label":"Deny","description":"deny"}],"multiple":false,"allow_custom":false}}]);
+        for (utterance, expected) in [
+            ("Approve it", Operation::Approve),
+            ("Deny it", Operation::Deny),
+            ("Option two", Operation::AnswerQuestion),
+            ("Always allow", Operation::AnswerQuestion),
+            ("Run the tests again", Operation::SendToAgent),
+            ("Ask Builder to check the build", Operation::SendToAgent),
+            ("Cancel Builder", Operation::Cancel),
+            ("Ask Builder to run the tests", Operation::SendToAgent),
+        ] {
+            let (decision, _) = router
+                .classify_with_questions(utterance, &roster, None, pending.clone())
+                .await
+                .unwrap();
+            println!("{utterance}: {:?}", decision.operation);
+            assert_eq!(decision.operation, expected);
+        }
+    }
+
+    #[test]
+    fn operation_classification_does_not_see_a_pending_permissions_command_text() {
+        let raw = json!([{"agent_id":"one","agent_name":"Builder","question":{"question_kind":"permission",
+            "body":"Run PRIVATE-COMMAND?","title":"PRIVATE-TITLE","options":[
+                {"label":"Always allow PRIVATE-COMMAND","description":"allow_persistent"}]}}]);
+        let value = operation_questions(&raw);
+        assert!(!value.to_string().contains("PRIVATE"));
+        assert_eq!(
+            value[0]["question"]["options"][0]["effect"],
+            "allow_persistent"
+        );
+        assert_eq!(value[0]["question"]["options"][0]["number"], 1);
+    }
+
+    #[test]
+    fn a_reply_can_target_the_only_pending_question_without_a_previous_send() {
+        let response = |operation| {
+            json!({"answers":{"operation":{"type":"choice","choice":operation},
+            "explicit_target":{"type":"choice","choice":"unspecified"}}})
+        };
+        let questions = json!([{"agent_id":"one","question":{"question_kind":"permission"}}]);
+        assert_eq!(
+            pending_target(&response("approve"), &questions).unwrap(),
+            Some("one")
+        );
+        assert_eq!(
+            pending_target(&response("send_to_agent"), &questions).unwrap(),
+            None
+        );
+        let questions = json!([{"agent_id":"one","question":{"question_kind":"question"}},
+            {"agent_id":"two","question":{"question_kind":"permission"}}]);
+        assert_eq!(
+            pending_target(&response("answer_question"), &questions).unwrap(),
+            None
+        );
+        assert_eq!(
+            pending_target(&response("deny"), &questions).unwrap(),
+            Some("two")
+        );
+    }
+
     fn agent(id: &str, name: &str) -> AgentInfo {
         AgentInfo {
             name: id.into(),

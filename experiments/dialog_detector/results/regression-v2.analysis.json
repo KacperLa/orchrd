@@ -1,0 +1,59 @@
+{
+  "attempts": 36,
+  "unique_cases": 36,
+  "fields": {
+    "classification": {
+      "passed": 34,
+      "total": 36
+    },
+    "route": {
+      "passed": 22,
+      "total": 36
+    }
+  },
+  "exact_passes": 20,
+  "cases_passing_all_repeats": 20,
+  "false_modal_routes": 0,
+  "false_conversation_routes": 0,
+  "expected_modal_routes": 24,
+  "missed_modal_routes": 14,
+  "expected_conversation_routes": 1,
+  "missed_conversation_routes": 0,
+  "errors": {},
+  "median_response_seconds_excluding_errors": 3.311,
+  "max_response_seconds": 3.552,
+  "confusion": {
+    "modal_dialog": {
+      "modal_dialog": 24
+    },
+    "no_question": {
+      "no_question": 8,
+      "uncertain": 1
+    },
+    "uncertain": {
+      "modal_dialog": 1,
+      "uncertain": 1
+    },
+    "conversational_question": {
+      "conversational_question": 1
+    }
+  },
+  "failed_cases": [
+    "reg-ansi_selection_lost",
+    "reg-arrow_single",
+    "reg-checked_not_focused",
+    "reg-error_screen",
+    "reg-explicit_digits",
+    "reg-letter_hotkeys",
+    "reg-missing_top",
+    "reg-multi_question_form",
+    "reg-multiple_no_controls",
+    "reg-non_ascii_choices",
+    "reg-numbering_not_shortcuts",
+    "reg-paged_menu",
+    "reg-persistent_approval",
+    "reg-question_while_working",
+    "reg-quoted_menu_above_active",
+    "reg-two_questions_latest"
+  ]
+}

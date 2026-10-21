@@ -21,7 +21,7 @@
     description = "Run the local Pocket TTS worker; disable when tts.provider is openai_compatible";
   };
   enableCodex = lib.mkEnableOption "the bridge to existing shared Codex daemon sessions";
-  startCodexServer = lib.mkEnableOption "a shared local Codex app server managed alongside the bridge";
+  startCodexServer = lib.mkEnableOption "a shared local Codex app server (independent of the bridge)";
   codexCommand = lib.mkOption {
     type = lib.types.str;
     default = "codex";

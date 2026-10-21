@@ -1,0 +1,56 @@
+{
+  "attempts": 4,
+  "unique_cases": 2,
+  "exact_passes": 0,
+  "core_passes": 0,
+  "valid_outputs": 0,
+  "cases_passing_all_repeats": 0,
+  "false_active": 1,
+  "unsupported_control_inferences": 0,
+  "errors": {
+    "TimeoutError": 3
+  },
+  "median_response_seconds_excluding_errors": 40.832,
+  "max_response_seconds": 40.832,
+  "fields": {
+    "status": {
+      "passed": 0,
+      "total": 4
+    },
+    "complete": {
+      "passed": 0,
+      "total": 4
+    },
+    "purpose": {
+      "passed": 1,
+      "total": 4
+    },
+    "input_mode": {
+      "passed": 0,
+      "total": 4
+    },
+    "labels": {
+      "passed": 1,
+      "total": 4
+    },
+    "effects": {
+      "passed": 0,
+      "total": 2
+    },
+    "interaction.selected_index": {
+      "passed": 0,
+      "total": 2
+    }
+  },
+  "failure_categories": {
+    "TimeoutError": 3,
+    "validation": 1,
+    "status": 1,
+    "complete": 1,
+    "input_mode": 1
+  },
+  "failed_cases": [
+    "live-codex-idle",
+    "live-codex-permission"
+  ]
+}

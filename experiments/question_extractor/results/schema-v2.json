@@ -1,0 +1,127 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "none",
+        "uncertain"
+      ]
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "clarification",
+        "permission",
+        "authentication",
+        "unknown"
+      ]
+    },
+    "input_mode": {
+      "type": "string",
+      "enum": [
+        "single_choice",
+        "multiple_choice",
+        "free_text",
+        "confirmation",
+        "unknown"
+      ]
+    },
+    "question": {
+      "type": "string"
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow_once",
+              "allow_persistent",
+              "deny",
+              "other",
+              "unknown"
+            ]
+          },
+          "shortcut": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "effect",
+          "shortcut"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allows_custom_answer": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "interaction": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "keyboard_menu",
+            "typed_shortcut",
+            "text_entry",
+            "unknown"
+          ]
+        },
+        "selected_index": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "instructions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "selected_index",
+        "instructions"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "status",
+    "complete",
+    "purpose",
+    "input_mode",
+    "question",
+    "options",
+    "allows_custom_answer",
+    "interaction",
+    "evidence"
+  ],
+  "additionalProperties": false
+}

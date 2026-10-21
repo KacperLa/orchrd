@@ -26,6 +26,81 @@ and agents; Orchrd has no separate project registry.
 
 ## How it works
 
+### Herdr backend (experimental)
+
+Orchrd can now discover coding agents directly from Herdr, without a wrapper or
+agent connector. Set the following in your runtime configuration and restart
+Orchrd:
+
+```toml
+[agents]
+backend = "herdr"
+herdr_command = "herdr" # An absolute executable path also works.
+herdr_session = "default"
+screen_lines = 30
+poll_seconds = 2
+```
+
+Run Herdr normally with its agents. Orchrd polls the roster and visible terminal
+text. Two background workers process changed, settled screens: System One checks
+for a current dialog or assistant question, then the `[intent]` model extracts
+the question, choices, type, and permission scopes. Literal grounding,
+completeness, and a fresh-screen check gate presentation. The prompts and schema
+are shared across agents; there are no per-agent terminal parsers in Orchrd.
+
+Open `orchrd-activity` to see detection/extraction progress and the current
+questions in the **Agent questions** panel. `orchrdctl status` includes them
+under `observed_questions`, with the full extraction and input capabilities.
+`read_only: true` now identifies an individual question whose controls could not
+be established; it does not disable the backend.
+`orchrdctl mode auto` enables automatic speech; muted mode still displays the
+questions. Asking Orchrd to read a named agent reads an available question with
+all its choices. `orchrdctl rescan` retries unchanged screens that did not yield
+a question; otherwise each unchanged screen is attempted once. Question
+extraction can take roughly 20–60 seconds with the currently tested model.
+Live testing has also returned a generic Enter/Escape confirmation instruction
+as the question itself. Grounding and completeness checks do not prove semantic
+correctness or that every permission scope was captured; compare the observed
+question with the terminal while testing. The live trial needed about 65 seconds
+for one extraction, so a longer `[intent].timeout_seconds` may be needed.
+
+The backend supports sending work, replying to chat questions, choosing menu
+options, approvals/denials, and cancellation. Prompts use `herdr agent prompt`;
+menu and form input uses `agent send-keys`, never a shell command. The controller
+binds questions to the capture present when speech starts, checks agent identity
+and the screen again immediately before writing, consumes question IDs once,
+and never automatically retries uncertain input.
+
+Say **approve** to choose an unambiguous **allow once** option, **deny** to select
+the denial option, or name a specific option/number. Persistent permission is
+available only by explicitly selecting that option; generic approval never
+promotes permission scope. Approval buttons are offered when both approval and
+denial controls are supported. Cancellation sends `ctrl+c` once.
+
+Menus require visible shortcuts or grounded focus with explicit Up/Down and
+Enter instructions. Checkbox menus additionally require visible checked states
+and Space/Enter controls; the controller toggles only states that differ from
+the requested selection. Modal text fields require visible Enter submission;
+chat questions use ordinary prompt submission. Unsupported controls stay in the
+terminal fallback. Text replies never become key names or shell syntax.
+
+Herdr's current input API has no atomic expected-screen condition. The final
+read reduces the race window but cannot eliminate concurrent user input or UI
+changes between that read and the write. Model grounding is not a semantic
+proof. Input delivery receipts do not claim task completion; the controller
+reports observed lifecycle transitions separately. Normal read requests can
+summarize terminal output; automatic completion summaries are still separate
+work for this backend.
+
+Use either this backend or the structured bridge; they are not merged. For Home
+Manager, keep `services.orchrd.enableCodex = false` while using Herdr, and ensure
+`herdr_command` is available in the user service's PATH. Select
+`backend = "bridge"` and restart to return to the existing connectors. Existing
+configurations default to the bridge backend.
+
+See the [pipeline evaluation](experiments/dialog_detector/PIPELINE.md) for the
+measured results and limitations. The flow below describes the bridge backend.
+
 ```mermaid
 flowchart LR
     Voice[You speak] --> Input[GNOME shortcut or Apple remote]

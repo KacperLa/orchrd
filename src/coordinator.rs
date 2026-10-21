@@ -32,6 +32,9 @@ pub struct Snapshot {
     pub agents: Vec<AgentInfo>,
     pub announcement_mode: AnnouncementMode,
     pub message: Option<String>,
+    /// Questions bound to current terminal captures, with input capabilities.
+    #[serde(default)]
+    pub observed_questions: Vec<Value>,
     #[serde(skip)]
     pub scope: Scope,
     #[serde(skip)]
@@ -48,6 +51,7 @@ impl Snapshot {
             agents: vec![],
             announcement_mode: mode,
             message: None,
+            observed_questions: vec![],
             scope: Scope {
                 session: CONVERSATION_SESSION.into(),
                 epoch: Uuid::new_v4().to_string(),
@@ -80,12 +84,19 @@ pub struct Speech {
     pub id: String,
     pub text: String,
     pub automatic: bool,
+    pub question_id: Option<String>,
 }
 impl Speech {
     pub fn current(&self, snapshot: &Snapshot) -> bool {
         self.scope == snapshot.scope
             && self.epoch == snapshot.speech_epoch
             && (!self.automatic || snapshot.announcement_mode == AnnouncementMode::Auto)
+            && self.question_id.as_ref().is_none_or(|id| {
+                snapshot
+                    .observed_questions
+                    .iter()
+                    .any(|q| q["question"]["question_id"].as_str() == Some(id))
+            })
     }
 }
 pub enum Message {
@@ -143,6 +154,15 @@ pub enum Message {
         scope: Scope,
         agents: Vec<AgentInfo>,
     },
+    ObservedQuestions {
+        scope: Scope,
+        questions: Vec<Value>,
+    },
+    ReadObservedQuestion {
+        scope: Scope,
+        agent_name: String,
+        reply: oneshot::Sender<Result<bool>>,
+    },
     Summarized {
         job: ResponseJob,
         speech: String,
@@ -180,6 +200,7 @@ struct Pending {
     accepted: bool,
     evidence: Option<&'static str>,
     reason: Option<&'static str>,
+    error: Option<String>,
     deadline: Instant,
     completed: oneshot::Sender<Value>,
 }
@@ -289,6 +310,12 @@ impl Coordinator {
             id: id.clone(),
             text,
             automatic,
+            question_id: self
+                .snapshot
+                .observed_questions
+                .iter()
+                .any(|q| q["question"]["question_id"] == id)
+                .then(|| id.clone()),
         }) {
             Ok(()) => Ok(()),
             Err(mpsc::error::TrySendError::Full(_)) => {
@@ -466,6 +493,127 @@ impl Coordinator {
                 }
                 self.observe(scope, agents)?;
             }
+            Message::ObservedQuestions { scope, questions } => {
+                if scope != self.snapshot.scope {
+                    return Ok(());
+                }
+                let old = std::mem::replace(&mut self.snapshot.observed_questions, questions);
+                self.snapshot.observed_questions.retain(|q| {
+                    self.snapshot.agents.iter().any(|agent| {
+                        q["agent_name"] == agent.name
+                            && q["instance_id"] == agent.instance_id
+                            && q["state_change_seq"] == json!(agent.state_change_seq)
+                    })
+                });
+                for value in self.snapshot.observed_questions.clone() {
+                    if old
+                        .iter()
+                        .any(|q| q["question"]["question_id"] == value["question"]["question_id"])
+                    {
+                        continue;
+                    }
+                    let question: crate::question::Question =
+                        serde_json::from_value(value["question"].clone())?;
+                    let name = value["agent_name"]
+                        .as_str()
+                        .context("observed question omitted agent")?;
+                    let display = self
+                        .snapshot
+                        .agents
+                        .iter()
+                        .find(|a| a.name == name)
+                        .map(|a| a.display_name.as_str())
+                        .unwrap_or(name);
+                    let hint = if value["read_only"] == true {
+                        "Answer in the agent terminal."
+                    } else if question.question_kind == "permission"
+                        && value["can_approve"] == true
+                        && value["can_deny"] == true
+                    {
+                        "Say approve to allow this request once, deny, or name an option."
+                    } else if question.question_kind == "permission" {
+                        "Name the option you want."
+                    } else {
+                        "You can reply by voice."
+                    };
+                    let speech = crate::tts::plain_speech(&format!(
+                        "{display}. {} {hint}",
+                        question.speech()
+                    ));
+                    self.db.append(
+                        &scope.session,
+                        "assistant",
+                        Some(name),
+                        "observed_question",
+                        &speech,
+                    )?;
+                    self.snapshot.message = Some(speech.clone());
+                    self.trace(
+                        Activity::new(
+                            &question.question_id,
+                            "dialog",
+                            "presented",
+                            true,
+                            json!({"question":question,"speech":speech,"read_only":value["read_only"]}),
+                        )
+                        .linked(None, Some(name.into())),
+                    );
+                    if question.question_kind == "permission"
+                        && value["can_approve"] == true
+                        && value["can_deny"] == true
+                    {
+                        let id = json!({"scope":scope,"agent_name":name,"instance_id":value["instance_id"],"question_id":question.question_id}).to_string();
+                        let _ = self.events.send(Event::Approval {
+                            id,
+                            message: speech.clone(),
+                        });
+                    } else {
+                        let _ = self.events.send(Event::Completion {
+                            agent_name: name.into(),
+                            speech: speech.clone(),
+                        });
+                    }
+                    if self.snapshot.announcement_mode == AnnouncementMode::Auto {
+                        self.queue_speech(&scope, question.question_id, speech, true)?;
+                    }
+                }
+            }
+            Message::ReadObservedQuestion {
+                scope,
+                agent_name,
+                reply,
+            } => {
+                let result = (|| {
+                    self.check_scope(&scope)?;
+                    let Some(value) = self
+                        .snapshot
+                        .observed_questions
+                        .iter()
+                        .find(|q| q["agent_name"] == agent_name)
+                    else {
+                        return Ok(false);
+                    };
+                    let question: crate::question::Question =
+                        serde_json::from_value(value["question"].clone())?;
+                    let hint = if value["read_only"] == true {
+                        "Answer in the agent terminal."
+                    } else {
+                        "You can reply by voice."
+                    };
+                    let speech = crate::tts::plain_speech(&format!("{} {hint}", question.speech()));
+                    self.db.append(
+                        &scope.session,
+                        "assistant",
+                        Some(&agent_name),
+                        "reply",
+                        &speech,
+                    )?;
+                    self.snapshot.message = Some(speech.clone());
+                    self.queue_speech(&scope, question.question_id, speech, false)?;
+                    Ok(true)
+                })();
+                let _ = reply.send(result);
+            }
             Message::Summarized { job, speech, reply } => {
                 let speech = if job.kind == "agent_question" {
                     crate::tts::plain_speech(&speech)
@@ -556,6 +704,14 @@ impl Coordinator {
                         kind,
                         OperationKind::Approve | OperationKind::Deny | OperationKind::Answer
                     ) && agent.status != "blocked"
+                        && !(matches!(kind, OperationKind::Answer)
+                            && matches!(agent.status.as_str(), "idle" | "done")
+                            && self.snapshot.observed_questions.iter().any(|q| {
+                                q["agent_name"] == agent.name
+                                    && q["instance_id"] == agent.instance_id
+                                    && q["conversation"] == true
+                                    && q["question"]["question_id"] == request["question_id"]
+                            }))
                     {
                         bail!("Agent is not waiting for input")
                     }
@@ -589,6 +745,7 @@ impl Coordinator {
                             accepted: false,
                             evidence: None,
                             reason: None,
+                            error: None,
                             deadline: Instant::now() + Duration::from_secs(25),
                             completed,
                         },
@@ -615,6 +772,7 @@ impl Coordinator {
                         Err(error) => {
                             tracing::warn!(%id,%error,"agent delivery unconfirmed");
                             op.reason = Some("delivery_unconfirmed");
+                            op.error = Some(crate::intent::redact(&format!("{error:#}")));
                             op.deadline = Instant::now();
                         }
                     }
@@ -723,7 +881,7 @@ impl Coordinator {
                     "unconfirmed"
                 })
             });
-            let result = json!({"operation_id":id,"agent_name":p.agent.name,"operation":p.kind,
+            let result = json!({"operation_id":id,"agent_name":p.agent.name,"operation":p.kind,"error":p.error,
                 "delivery":if p.accepted{"accepted"}else{"unconfirmed"},"outcome":outcome});
             self.db
                 .finish_delivery(&id, &p.scope.session, &p.agent.name, &result)?;
@@ -773,6 +931,13 @@ fn operation_evidence(
             Some("response_observed")
         }
         OperationKind::Answer
+            if matches!(before.status.as_str(), "idle" | "done")
+                && changed
+                && matches!(after.status.as_str(), "working" | "blocked") =>
+        {
+            Some("response_observed")
+        }
+        OperationKind::Answer
             if before.status == "blocked" && after.status == "blocked" && changed =>
         {
             Some("answer_recorded")
@@ -787,6 +952,121 @@ fn operation_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inferred_permissions_are_read_only_deduplicated_and_speech_tracks_the_screen() {
+        let (mut c, mut audio) = fixture();
+        let scope = c.snapshot.scope.clone();
+        c.observe(scope.clone(), vec![agent("blocked", 1)]).unwrap();
+        let mut events = c.events.subscribe();
+        let value = json!({"agent_name":"coder","instance_id":"pane","state_change_seq":1,"read_only":true,
+            "question":{"question_id":"observed","question_kind":"permission","title":"Approval", "body":"Run command?",
+                "options":[{"id":"0","label":"Allow once","description":"allow_once"},
+                    {"id":"1","label":"Always allow","description":"allow_persistent"},
+                    {"id":"2","label":"Deny","description":"deny"}],"multiple":false,"allow_custom":false}});
+        for _ in 0..2 {
+            c.handle(Message::ObservedQuestions {
+                scope: scope.clone(),
+                questions: vec![value.clone()],
+            })
+            .unwrap();
+        }
+        let speech = audio.try_recv().unwrap();
+        assert!(speech.text.contains("Option 3: Deny"));
+        assert!(speech.text.contains("Answer in the agent terminal"));
+        assert!(speech.current(&c.snapshot));
+        assert!(audio.try_recv().is_err());
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            Event::Completion { .. }
+        ));
+        assert!(events.try_recv().is_err()); // No actionable approval signal.
+        let (reply, mut received) = oneshot::channel();
+        c.handle(Message::ReadObservedQuestion {
+            scope: scope.clone(),
+            agent_name: "coder".into(),
+            reply,
+        })
+        .unwrap();
+        assert!(received.try_recv().unwrap().unwrap());
+        let read = audio.try_recv().unwrap();
+        assert!(!read.automatic);
+        assert!(read.text.contains("Option 3: Deny"));
+        c.handle(Message::ObservedQuestions {
+            scope: scope.clone(),
+            questions: vec![],
+        })
+        .unwrap();
+        assert!(!speech.current(&c.snapshot));
+        assert!(!read.current(&c.snapshot));
+        c.observe(scope.clone(), vec![]).unwrap();
+        c.handle(Message::ObservedQuestions {
+            scope,
+            questions: vec![value],
+        })
+        .unwrap();
+        assert!(c.snapshot.observed_questions.is_empty());
+        assert!(audio.try_recv().is_err());
+    }
+
+    #[test]
+    fn actionable_permissions_emit_bound_approval_controls() {
+        let (mut c, _audio) = fixture();
+        let scope = c.snapshot.scope.clone();
+        c.observe(scope.clone(), vec![agent("blocked", 1)]).unwrap();
+        let mut events = c.events.subscribe();
+        c.handle(Message::ObservedQuestions { scope, questions:vec![json!({"agent_name":"coder","instance_id":"pane",
+            "state_change_seq":1,"read_only":false,"can_approve":true,"can_deny":true,
+            "question":{"question_id":"bound","question_kind":"permission","title":"Permission","body":"Run?",
+                "options":[],"multiple":false,"allow_custom":false}})] }).unwrap();
+        let Event::Approval { id, message } = events.try_recv().unwrap() else {
+            panic!("expected approval")
+        };
+        let reference: Value = serde_json::from_str(&id).unwrap();
+        assert_eq!(reference["question_id"], "bound");
+        assert_eq!(reference["instance_id"], "pane");
+        assert!(message.contains("once"));
+    }
+    #[test]
+    fn chat_answers_require_the_bound_question_and_observe_resumed_work() {
+        let (mut c, _audio) = fixture();
+        let scope = c.snapshot.scope.clone();
+        c.observe(scope.clone(), vec![agent("idle", 1)]).unwrap();
+        c.snapshot.observed_questions = vec![
+            json!({"agent_name":"coder","instance_id":"pane","conversation":true,
+            "question":{"question_id":"chat","question_kind":"question"}}),
+        ];
+        for id in ["wrong", "chat"] {
+            let (registered, mut registration) = oneshot::channel();
+            let (completed, mut completion) = oneshot::channel();
+            c.handle(Message::Begin {
+                parent: None,
+                scope: scope.clone(),
+                agent_name: "coder".into(),
+                kind: OperationKind::Answer,
+                request: json!({"question_id":id}),
+                registered,
+                completed,
+            })
+            .unwrap();
+            let result = registration.try_recv().unwrap();
+            if id == "wrong" {
+                assert!(result.is_err());
+                continue;
+            }
+            let (operation, _) = result.unwrap();
+            c.handle(Message::Delivered {
+                id: operation,
+                result: Ok(()),
+            })
+            .unwrap();
+            c.observe(scope.clone(), vec![agent("working", 2)]).unwrap();
+            assert_eq!(
+                completion.try_recv().unwrap()["outcome"],
+                "response_observed"
+            );
+        }
+    }
 
     #[test]
     fn full_speech_queue_marks_skipped_and_keeps_coordinator_available() {

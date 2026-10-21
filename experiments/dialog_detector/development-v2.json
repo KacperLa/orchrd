@@ -1,0 +1,86 @@
+[
+  {
+    "id": "dev-menu",
+    "split": "development",
+    "origin": "synthetic",
+    "current": {
+      "screen": "Which package?\n❯ Server\n  Client\nUp/Down to select; Enter to submit.",
+      "lifecycle": "blocked",
+      "state_change_seq": 12
+    },
+    "expected": {
+      "classification": "modal_dialog",
+      "route": "extract_modal"
+    }
+  },
+  {
+    "id": "dev-placeholder",
+    "split": "development",
+    "origin": "synthetic",
+    "current": {
+      "screen": "Assistant: Updated the tests. Everything passes.\n\n› Ask Codex to do anything\n? for shortcuts",
+      "lifecycle": "idle",
+      "state_change_seq": 12
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "dev-chat-question",
+    "split": "development",
+    "origin": "synthetic",
+    "current": {
+      "screen": "Assistant: Which version of Python is installed on your machine?\n\n> Type a message",
+      "lifecycle": "idle",
+      "state_change_seq": 12
+    },
+    "expected": {
+      "classification": "conversational_question",
+      "route": "extract_conversation"
+    }
+  },
+  {
+    "id": "chat-question-user-authored",
+    "split": "development",
+    "origin": "synthetic",
+    "current": {
+      "screen": "User: Should I use SQLite or PostgreSQL?\nAssistant: SQLite is sufficient for a single-user local tool.\n\n> Ask a question",
+      "lifecycle": "idle",
+      "state_change_seq": 12
+    },
+    "expected": {
+      "classification": "no_question",
+      "route": "ignore"
+    }
+  },
+  {
+    "id": "truncated-header",
+    "split": "development",
+    "origin": "synthetic",
+    "current": {
+      "screen": "[upper part of current dialog unavailable]\n  Second alternative\n  Third alternative\nEnter: select",
+      "lifecycle": "blocked",
+      "state_change_seq": 12
+    },
+    "expected": {
+      "classification": "uncertain",
+      "route": "uncertain"
+    }
+  },
+  {
+    "id": "blocked-only-status",
+    "split": "development",
+    "origin": "synthetic",
+    "current": {
+      "screen": "Connecting to the input service...\nPlease wait while the interface loads.",
+      "lifecycle": "blocked",
+      "state_change_seq": 12
+    },
+    "expected": {
+      "classification": "uncertain",
+      "route": "uncertain"
+    }
+  }
+]

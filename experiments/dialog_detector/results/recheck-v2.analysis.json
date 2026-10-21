@@ -1,0 +1,51 @@
+{
+  "attempts": 24,
+  "unique_cases": 24,
+  "fields": {
+    "classification": {
+      "passed": 21,
+      "total": 24
+    },
+    "route": {
+      "passed": 20,
+      "total": 24
+    }
+  },
+  "exact_passes": 17,
+  "cases_passing_all_repeats": 17,
+  "false_modal_routes": 0,
+  "false_conversation_routes": 0,
+  "expected_modal_routes": 5,
+  "missed_modal_routes": 3,
+  "expected_conversation_routes": 3,
+  "missed_conversation_routes": 0,
+  "errors": {},
+  "median_response_seconds_excluding_errors": 3.311,
+  "max_response_seconds": 3.525,
+  "confusion": {
+    "modal_dialog": {
+      "modal_dialog": 7
+    },
+    "conversational_question": {
+      "conversational_question": 4
+    },
+    "no_question": {
+      "conversational_question": 1,
+      "no_question": 9
+    },
+    "uncertain": {
+      "modal_dialog": 1,
+      "no_question": 1,
+      "uncertain": 1
+    }
+  },
+  "failed_cases": [
+    "blocked-only-status",
+    "chat-question-user-authored",
+    "checkbox-tools",
+    "empty-screen",
+    "live-became-modal",
+    "numbered-targets",
+    "truncated-header"
+  ]
+}

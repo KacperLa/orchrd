@@ -13,6 +13,9 @@ struct OrchrdApi {
 }
 #[zbus::interface(name = "io.github.kacper.Orchrd1")]
 impl OrchrdApi {
+    async fn rescan_questions(&self) -> fdo::Result<()> {
+        self.controller.rescan_questions().await.map_err(fdo_err)
+    }
     async fn start_listening(&self) -> fdo::Result<()> {
         self.controller.start_listening().await.map_err(fdo_err)
     }

@@ -57,6 +57,26 @@ let
     ];
   };
   services = standalone.config.systemd.user.services;
+  serverOnly = home-manager.lib.homeManagerConfiguration {
+    inherit pkgs;
+    modules = [
+      self.homeManagerModules.default
+      {
+        home = {
+          username = "alice";
+          homeDirectory = "/home/alice";
+          stateVersion = "26.05";
+        };
+        services.orchrd = {
+          enable = true;
+          package = pkgs.hello;
+          enableCodex = false;
+          startCodexServer = true;
+          enablePocketTts = false;
+        };
+      }
+    ];
+  };
 in
 assert !(disabled ? home-manager);
 assert !(disabled.systemd.services ? apple-remote-mouse);
@@ -66,6 +86,9 @@ assert pkgs.lib.asserts.assertMsg (builtins.all (a: a.assertion) enabled.asserti
 assert services.orchrd.Unit.ConditionPathExists == "/home/alice/.config/orchrd/config.toml";
 assert services.orchrd.Service.EnvironmentFile == [ "/run/secrets/orchrd" ];
 assert services ? orchrd-codex && services ? orchrd-codex-server && services ? orchrd-tts;
+assert !(serverOnly.config.systemd.user.services ? orchrd-codex);
+assert serverOnly.config.systemd.user.services ? orchrd-codex-server;
+assert !(serverOnly.config.systemd.user.services ? orchrd-tts);
 assert enabled.systemd.services.apple-remote-mouse.serviceConfig.User == "alice";
 assert enabled.systemd.services.apple-remote-mic.environment.XDG_RUNTIME_DIR == "/run/user/1234";
 assert pkgs.lib.hasInfix "--mac AA:BB:CC:DD:EE:FF"

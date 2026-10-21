@@ -27,6 +27,29 @@ def fixture():
 
 
 class ActivityTests(unittest.TestCase):
+    def test_observed_questions_panel_shows_every_choice_and_clears_with_snapshot(self):
+        app = Gtk.Application(application_id="io.github.kacper.Orchrd.QuestionsTest", flags=Gio.ApplicationFlags.NON_UNIQUE)
+        app.register(None)
+        window = ActivityWindow(app)
+        try:
+            snapshot = fixture()
+            snapshot["observed_questions"] = [{"agent_name": "Builder", "read_only": True,
+                "question": {"body": "Allow command?", "options": [
+                    {"label": "Allow once"}, {"label": "Always allow"}, {"label": "Deny"}]}}]
+            window.accept(json.dumps(snapshot))
+            self.assertTrue(window.questions_panel.get_visible())
+            text = window.questions.get_text()
+            self.assertIn("Allow command?", text)
+            self.assertIn("2. Always allow", text)
+            self.assertIn("3. Deny", text)
+            snapshot["revision"] += 1
+            snapshot["observed_questions"] = []
+            window.accept(json.dumps(snapshot))
+            self.assertFalse(window.questions_panel.get_visible())
+        finally:
+            window.close()
+            window.destroy()
+
     def test_footer_text_is_visually_centered_on_stream(self):
         for text in ("Orchrd", "Builder", "A"):
             surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 240, 40)
@@ -39,7 +62,7 @@ class ActivityTests(unittest.TestCase):
             self.assertAlmostEqual((min(columns) + max(columns)) / 2, 120, delta=3)
 
     def test_every_action_has_a_distinct_vector_glyph(self):
-        self.assertEqual(set(ACTION_GLYPHS), {"utterance", "list_agents", "read_agent", "send_to_agent", "delivery", "respond_to_agent", "cancel_agent", "summary", "speech", "agent_status", "monitor", "latest_result"})
+        self.assertEqual(set(ACTION_GLYPHS), {"utterance", "list_agents", "read_agent", "send_to_agent", "delivery", "respond_to_agent", "cancel_agent", "summary", "speech", "agent_status", "monitor", "latest_result", "dialog"})
         images = []
         for kind in [*ACTION_GLYPHS, "future_action"]:
             surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 32, 32)

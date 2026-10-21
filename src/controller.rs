@@ -1,7 +1,7 @@
 use crate::activity::Activity;
 pub use crate::coordinator::{Event, Scope, Snapshot};
 use crate::{
-    agent_bridge::AgentBridge,
+    agents::Agents,
     config::{AnnouncementMode, Config},
     coordinator::{Coordinator, Message, OperationKind, Speech},
     db::Database,
@@ -45,7 +45,7 @@ struct Runtime {
 pub struct Controller {
     pub config: Arc<Config>,
     db: Arc<Database>,
-    agents: AgentBridge,
+    agents: Agents,
     intent: IntentClient,
     router: Router,
     tts: TtsClient,
@@ -90,7 +90,7 @@ impl Controller {
             summaries.clone(),
         );
         Ok(Arc::new(Self {
-            agents: AgentBridge::default(),
+            agents: Agents::new(&config),
             intent: IntentClient::new(&config)?,
             router: Router::new(&config.routing)?,
             tts: TtsClient::from_config(&config)?,
@@ -196,7 +196,7 @@ impl Controller {
         }
         let scope = self.snapshots.borrow().scope.clone();
         let token = Uuid::new_v4().to_string();
-        let permissions = self.agents.permission_ids().await;
+        let permissions = self.agents.question_ids().await;
         self.voice(&scope, &token, "listening").await?;
         let _ = self.tts.cancel().await;
         match self.stt.start(&token).await {
@@ -282,7 +282,7 @@ impl Controller {
         if text.trim().is_empty() || text.len() > 64_000 {
             bail!("dispatch text must contain between 1 and 64000 bytes")
         }
-        let permissions = self.agents.permission_ids().await;
+        let permissions = self.agents.question_ids().await;
         // Pin the controller lifetime at submission, before this turn waits behind another.
         let scope = self.snapshots.borrow().scope.clone();
         let (completed, rx) = oneshot::channel();
@@ -315,15 +315,17 @@ impl Controller {
         let agent = string_arg(&target, "agent_name")?;
         let question_id = string_arg(&target, "question_id")?;
         let current = self.context(&scope).await?;
-        if !current.agents.iter().any(|a| {
-            a.name == agent && Some(a.instance_id.as_str()) == target["instance_id"].as_str()
-        }) {
-            bail!("The agent associated with this approval is no longer present")
-        }
+        let expected = current
+            .agents
+            .iter()
+            .find(|a| {
+                a.name == agent && Some(a.instance_id.as_str()) == target["instance_id"].as_str()
+            })
+            .context("The agent associated with this approval is no longer present")?;
         let result = self
             .operation(
                 &scope,
-                agent,
+                expected,
                 if approve {
                     OperationKind::Approve
                 } else {
@@ -351,6 +353,12 @@ impl Controller {
         let bridge_messages = self.messages.clone();
         tasks.spawn(async move { agents.serve(bridge_messages).await });
         tasks.spawn(self.clone().poll_worker());
+        if self.agents.herdr().is_some() {
+            // Keep slow extraction separate from status/voice processing.
+            for _ in 0..2 {
+                tasks.spawn(self.clone().dialog_worker());
+            }
+        }
         tasks.spawn(self.clone().summary_worker());
         tasks.spawn(self.clone().conversation_worker(runtime.turns));
         tasks.spawn(Self::speech_worker(
@@ -369,10 +377,109 @@ impl Controller {
     async fn poll_worker(self: Arc<Self>) -> Result<()> {
         loop {
             let scope = self.snapshots.borrow().scope.clone();
-            let agents = self.agents.snapshot().await;
+            let agents = match self.agents.snapshot().await {
+                Ok(agents) => agents,
+                Err(error) => {
+                    tracing::warn!(%error, "agent observation unavailable");
+                    self.trace(
+                        &scope,
+                        Activity::new(
+                            "herdr-monitor",
+                            "monitor",
+                            "unavailable",
+                            true,
+                            json!({"error":error.to_string()}),
+                        ),
+                    )?;
+                    Vec::new()
+                }
+            };
             self.send(Message::Polled { scope, agents }).await?;
-            sleep(Duration::from_millis(200)).await;
+            if let Some(herdr) = self.agents.herdr() {
+                let scope = self.snapshots.borrow().scope.clone();
+                let questions = herdr.questions().await;
+                self.send(Message::ObservedQuestions { scope, questions })
+                    .await?;
+            }
+            sleep(if self.agents.herdr().is_some() {
+                Duration::from_secs(self.config.agents.poll_seconds)
+            } else {
+                Duration::from_millis(200)
+            })
+            .await;
         }
+    }
+    async fn dialog_worker(self: Arc<Self>) -> Result<()> {
+        let herdr = self.agents.herdr().context("Herdr backend is disabled")?;
+        loop {
+            let Some(capture) = herdr.next().await else {
+                sleep(Duration::from_millis(250)).await;
+                continue;
+            };
+            let scope = self.snapshots.borrow().scope.clone();
+            let id = Uuid::new_v4().to_string();
+            let trace = |state: &str, finished: bool, detail: Value| {
+                self.trace(
+                    &scope,
+                    Activity::new(&id, "dialog", state, finished, detail)
+                        .linked(None, Some(capture.agent.name.clone())),
+                )
+            };
+            trace("detecting", false, json!({"observation":true}))?;
+            let result = async {
+                let route = crate::dialog::detect(&self.router, &capture).await?;
+                if !herdr.current(&capture).await {
+                    return Ok(("stale", None));
+                }
+                herdr.mark_detection(&capture, route).await;
+                match route {
+                    crate::dialog::Route::Ignore => Ok(("ignored", None)),
+                    crate::dialog::Route::Inspect => Ok(("inspect", None)),
+                    _ => {
+                        trace("extracting", false, json!({"observation":true}))?;
+                        let (question, extracted) =
+                            crate::dialog::extract(&self.intent, &capture, route).await?;
+                        if !herdr.current(&capture).await {
+                            return Ok(("stale", None));
+                        }
+                        let detail =
+                            json!({"question":question,"extraction":extracted,"observation":true});
+                        herdr
+                            .store(
+                                &capture,
+                                question,
+                                extracted,
+                                route == crate::dialog::Route::Conversation,
+                            )
+                            .await;
+                        Ok::<_, anyhow::Error>(("available", Some(detail)))
+                    }
+                }
+            }
+            .await;
+            match result {
+                Ok((state, detail)) => trace(
+                    state,
+                    true,
+                    detail.unwrap_or_else(|| json!({"observation":true})),
+                )?,
+                Err(error) => trace(
+                    "inspect",
+                    true,
+                    json!({"reason":format!("{error:#}"),"observation":true}),
+                )?,
+            }
+            herdr.finish(&capture).await;
+        }
+    }
+
+    pub async fn rescan_questions(&self) -> Result<()> {
+        let herdr = self
+            .agents
+            .herdr()
+            .context("Rescanning is available with the Herdr backend")?;
+        herdr.retry().await;
+        Ok(())
     }
     async fn summary_worker(self: Arc<Self>) -> Result<()> {
         loop {
@@ -572,12 +679,12 @@ impl Controller {
                 | Operation::Approve
                 | Operation::Deny
         ) {
-            if let Some(question) = self
-                .agents
-                .question(&agent.name)
-                .await
-                .filter(|q| q.question_kind == "question")
-            {
+            if let Some(question) = self.agents.question(&agent.name).await.filter(|q| {
+                q.question_kind == "question" || decision.operation == Operation::AnswerQuestion
+            }) {
+                if turn.permissions.get(&agent.name) != Some(&question.question_id) {
+                    return self.reply(&turn.scope,"That question was not current when you started speaking. Please answer the latest question.").await;
+                }
                 let (answer, evidence) = self.router.answer_question(&text, &question).await?;
                 self.trace(
                     &turn.scope,
@@ -610,7 +717,7 @@ impl Controller {
                 let result = self
                     .operation(
                         &turn.scope,
-                        &agent.name,
+                        &agent,
                         OperationKind::Answer,
                         value,
                         Some(turn.token.clone()),
@@ -633,7 +740,7 @@ impl Controller {
                     .await;
             }
         }
-        let (name, arguments) = match decision.operation {
+        let (name, mut arguments) = match decision.operation {
             Operation::SendToAgent => ("send_to_agent", json!({"agent_id":agent.name})),
             Operation::ReadAgent => ("read_agent", json!({"agent_id":agent.name})),
             Operation::Cancel => ("cancel_agent", json!({"agent_id":agent.name})),
@@ -656,6 +763,8 @@ impl Controller {
             }
             _ => unreachable!(),
         };
+        arguments["expected_instance_id"] = json!(agent.instance_id);
+        arguments["expected_state_change_seq"] = json!(agent.state_change_seq);
         let trace_id = format!("{}/tool", turn.token);
         let call = ToolCall {
             id: trace_id.clone(),
@@ -705,6 +814,24 @@ impl Controller {
             }
         };
         if decision.operation == Operation::ReadAgent {
+            if let Some(herdr) = self.agents.herdr() {
+                let questions = herdr.questions().await;
+                self.send(Message::ObservedQuestions {
+                    scope: turn.scope.clone(),
+                    questions,
+                })
+                .await?;
+                if self
+                    .ask(|reply| Message::ReadObservedQuestion {
+                        scope: turn.scope.clone(),
+                        agent_name: agent.name.clone(),
+                        reply,
+                    })
+                    .await?
+                {
+                    return Ok(());
+                }
+            }
             self.record(
                 &turn.scope,
                 "tool",
@@ -757,6 +884,17 @@ impl Controller {
             .iter()
             .find(|a| a.name == name)
             .with_context(|| format!("Unknown agent_id {name:?}. Use an exact agent_id from the current roster, not a display name: {}", crate::intent::routing_agents(&context.agents)))?;
+        if call.arguments["expected_instance_id"]
+            .as_str()
+            .is_some_and(|id| id != agent.instance_id)
+            || (self.agents.herdr().is_some()
+                && call
+                    .arguments
+                    .get("expected_state_change_seq")
+                    .is_some_and(|seq| *seq != json!(agent.state_change_seq)))
+        {
+            bail!("The selected agent changed while routing; please try again")
+        }
         // Assign an agent lane only after validating the actual target. Invalid
         // arguments remain visible on the Orchrd lane, never as invented agents.
         self.trace(
@@ -800,7 +938,7 @@ impl Controller {
                     .await?;
                 self.operation(
                     scope,
-                    name,
+                    agent,
                     OperationKind::Send,
                     json!({"agent_id":name,"request":request}),
                     Some(trace_id.into()),
@@ -813,7 +951,7 @@ impl Controller {
                     .context("respond_to_agent omitted approve")?;
                 self.operation(
                     scope,
-                    name,
+                    agent,
                     if approve {
                         OperationKind::Approve
                     } else {
@@ -827,7 +965,7 @@ impl Controller {
             "cancel_agent" => {
                 self.operation(
                     scope,
-                    name,
+                    agent,
                     OperationKind::Cancel,
                     call.arguments.clone(),
                     Some(trace_id.into()),
@@ -840,13 +978,14 @@ impl Controller {
     async fn operation(
         &self,
         scope: &Scope,
-        name: &str,
+        target: &crate::agent::AgentInfo,
         kind: OperationKind,
         request: Value,
         parent: Option<String>,
     ) -> Result<Value> {
+        let name = target.name.as_str();
         let (completed, rx) = oneshot::channel();
-        let (id, _agent) = self
+        let (id, _registered_agent) = self
             .ask(|registered| Message::Begin {
                 scope: scope.clone(),
                 agent_name: name.into(),
@@ -863,7 +1002,7 @@ impl Controller {
                 OperationKind::Send => {
                     self.agents
                         .command(
-                            name,
+                            target,
                             "prompt",
                             json!({"text":string_arg(&request,"request")?}),
                         )
@@ -871,19 +1010,19 @@ impl Controller {
                 }
                 OperationKind::Answer => {
                     self.agents
-                        .command(name, "answer_question", request.clone())
+                        .command(target, "answer_question", request.clone())
                         .await
                 }
                 OperationKind::Approve | OperationKind::Deny => {
                     self.agents
                         .command(
-                            name,
+                            target,
                             "permission",
                             json!({"approve":matches!(kind,OperationKind::Approve),"question_id":string_arg(&request,"question_id")?}),
                         )
                         .await
                 }
-                OperationKind::Cancel => self.agents.command(name, "cancel", json!({})).await,
+                OperationKind::Cancel => self.agents.command(target, "cancel", json!({})).await,
             }
         })
         .await
@@ -1089,6 +1228,7 @@ mod tests {
             scope: snapshot.scope.clone(),
             epoch: snapshot.speech_epoch,
             automatic: true,
+            question_id: None,
         };
         let mut stale = make("stale");
         stale.scope.epoch = "old lifetime".into();

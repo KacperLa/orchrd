@@ -43,6 +43,30 @@ impl IntentClient {
             request.bearer_auth(&self.api_key)
         }
     }
+    pub(crate) async fn extract_dialog(&self, screen: &str, lifecycle: &str) -> Result<Value> {
+        let schema: Value = serde_json::from_str(include_str!("dialog/schema.json"))?;
+        let response = self.post().json(&json!({"model":self.model,
+            "messages":[{"role":"system","content":format!("{}\nJSON schema:\n{}",include_str!("dialog/extractor.txt"),schema)},
+                {"role":"user","content":json!({"screen":screen,"lifecycle_hint":lifecycle}).to_string()}],
+            "response_format":{"type":"json_schema","json_schema":{"name":"terminal_question","strict":true,"schema":schema}}
+        })).send().await.map_err(|error| error.without_url()).context("call dialog extractor")?;
+        if !response.status().is_success() {
+            bail!("dialog extractor returned HTTP {}", response.status())
+        }
+        let response: Value = response
+            .json()
+            .await
+            .context("decode dialog extractor response")?;
+        let finish = &response["choices"][0]["finish_reason"];
+        if !finish.is_null() && finish != "stop" {
+            bail!("dialog extractor did not finish")
+        }
+        let content = response
+            .pointer("/choices/0/message/content")
+            .and_then(Value::as_str)
+            .context("dialog extractor omitted content")?;
+        serde_json::from_str(content).context("dialog extractor returned invalid JSON")
+    }
     pub async fn draft_agent_request(&self, utterance: &str, recipient: &str) -> Result<String> {
         let response = self
             .post()
@@ -139,6 +163,40 @@ pub fn redact(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn dialog_extraction_uses_the_shared_schema_and_rejects_unfinished_output() {
+        for finish in ["stop", "length"] {
+            let body = json!({"choices":[{"finish_reason":finish,"message":{"content":"{}"}}]})
+                .to_string();
+            let (settings, server) = crate::speech_api::tests::server("200 OK", &body).await;
+            let mut config = Config::default();
+            config.intent.base_url = settings.base_url;
+            config.intent.api_key_env.clear();
+            let client = IntentClient::new(&config).unwrap();
+            let result = client.extract_dialog("Choose target", "blocked").await;
+            assert_eq!(result.is_ok(), finish == "stop");
+            let request = server.await.unwrap();
+            let end = request
+                .windows(4)
+                .position(|value| value == b"\r\n\r\n")
+                .unwrap()
+                + 4;
+            let payload: Value = serde_json::from_slice(&request[end..]).unwrap();
+            assert_eq!(payload["response_format"]["type"], "json_schema");
+            assert_eq!(payload["response_format"]["json_schema"]["strict"], true);
+            assert_eq!(
+                payload["response_format"]["json_schema"]["schema"],
+                serde_json::from_str::<Value>(include_str!("dialog/schema.json")).unwrap()
+            );
+            let observation: Value =
+                serde_json::from_str(payload["messages"][1]["content"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                observation,
+                json!({"screen":"Choose target","lifecycle_hint":"blocked"})
+            );
+        }
+    }
+
     #[tokio::test]
     async fn provider_errors_never_echo_private_bodies_and_redirects_are_rejected() {
         for status in [

@@ -9,12 +9,43 @@ use std::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
+    pub agents: Agents,
     pub intent: Intent,
     pub routing: Routing,
     pub conversation: Conversation,
     pub voice: Voice,
     pub stt: Stt,
     pub tts: Tts,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Agents {
+    pub backend: AgentBackend,
+    pub herdr_command: String,
+    pub herdr_session: String,
+    pub screen_lines: usize,
+    pub poll_seconds: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentBackend {
+    #[default]
+    Bridge,
+    Herdr,
+}
+
+impl Default for Agents {
+    fn default() -> Self {
+        Self {
+            backend: AgentBackend::Bridge,
+            herdr_command: "herdr".into(),
+            herdr_session: "default".into(),
+            screen_lines: 30,
+            poll_seconds: 2,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -147,6 +178,7 @@ impl SpeechApi {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            agents: Agents::default(),
             intent: Intent {
                 base_url: String::new(),
                 model: String::new(),
@@ -213,6 +245,13 @@ impl Config {
         Ok(cfg)
     }
     pub fn validate(&self) -> Result<()> {
+        if self.agents.herdr_command.trim().is_empty()
+            || self.agents.herdr_session.trim().is_empty()
+            || !(10..=200).contains(&self.agents.screen_lines)
+            || !(1..=60).contains(&self.agents.poll_seconds)
+        {
+            bail!("agents requires a Herdr command/session, screen_lines 10..200 and poll_seconds 1..60")
+        }
         validate_url(&self.intent.base_url, "intent.base_url")?;
         validate_url(&self.routing.endpoint, "routing.endpoint")?;
         validate_env_name(&self.intent.api_key_env, "intent.api_key_env")?;
@@ -440,6 +479,21 @@ mod tests {
         let config: Config = toml::from_str(include_str!("../config.example.toml")).unwrap();
         config.validate().unwrap();
     }
+    #[test]
+    fn herdr_is_opt_in_and_observation_limits_are_validated() {
+        assert_eq!(Config::default().agents.backend, AgentBackend::Bridge);
+        let agents: Agents = toml::from_str("backend = 'herdr'").unwrap();
+        assert_eq!(agents.backend, AgentBackend::Herdr);
+        assert_eq!(agents.screen_lines, 30);
+        for (lines, seconds) in [(0, 2), (201, 2), (30, 0), (30, 61)] {
+            let mut config = configured();
+            config.agents.screen_lines = lines;
+            config.agents.poll_seconds = seconds;
+            assert!(config.validate().is_err());
+        }
+        assert!(toml::from_str::<Agents>("backend = 'typo'").is_err());
+    }
+
     #[test]
     fn defaults_are_stable() {
         let c = Config::default();
