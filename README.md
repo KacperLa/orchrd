@@ -382,9 +382,10 @@ PipeWire. Holding Siri selects the remote microphone and starts recording;
 release drains the audio, submits it to Orchrd, and restores the previous input
 unless you changed sources while recording.
 
-The touchpad's right edge scrolls vertically, its top edge scrolls horizontally,
-and a mechanical click in the top-right corner is a right click. The shared
-zone definitions live in [`apple_remote_zones.py`](apple_tv_remote/apple_remote_zones.py).
+Dragging the touchpad's right edge scrolls vertically, dragging its top edge
+scrolls horizontally, and a mechanical click in the top-right corner is a right
+click. The shared zone definitions live in
+[`apple_remote_zones.py`](apple_tv_remote/apple_remote_zones.py).
 
 Add this separate input to your NixOS flake:
 
@@ -406,6 +407,8 @@ In a host module with `apple-tv-remote` in scope:
     enable = true;
     user = "you";
     macAddress = "AA:BB:CC:DD:EE:FF";
+    edgeMm = 2; # Scroll strip width; raise it if edge scrolling feels unreachable.
+    cornerMm = 4; # Top-right right-click zone; must be at least edgeMm.
   };
 }
 ```
@@ -414,6 +417,12 @@ Pair the remote first. The module configures Bluetooth/uinput permissions and
 creates the system services `apple-remote-mouse.service` and
 `apple-remote-mic.service`. It needs the selected user's PipeWire session and
 `orchrdctl` from the Home Manager setup. Rebuild NixOS to apply it.
+
+The scroll strips are narrow on purpose: they are measured inward from the pad's
+measured extreme, which a finger only reaches when it is rolled against the
+remote's own side. Contacts further in move the pointer. Once a contact starts in
+a strip it keeps scrolling for the whole touch, so a swipe does not fall back to
+pointer movement when the finger drifts inward.
 
 ## Diagnostics
 
