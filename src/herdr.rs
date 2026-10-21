@@ -1,6 +1,7 @@
 //! Herdr observation and input, bound to live agent instances and questions.
 use crate::{
     agent::AgentInfo,
+    completion::{Completion, Completions},
     config::Agents,
     dialog::{Capture, Route},
     question::{Answer, Question},
@@ -23,6 +24,7 @@ pub(crate) struct Herdr {
     state: Arc<Mutex<HashMap<String, Entry>>>,
     running: Arc<Mutex<HashSet<String>>>,
     actions: Arc<Mutex<()>>,
+    completions: Arc<Mutex<Completions>>,
 }
 struct Entry {
     capture: Capture,
@@ -53,6 +55,7 @@ impl Herdr {
             state: Arc::default(),
             running: Arc::default(),
             actions: Arc::default(),
+            completions: Arc::default(),
         }
     }
     async fn run(&self, args: &[&str]) -> Result<String> {
@@ -269,9 +272,11 @@ impl Herdr {
             Ok(agents) => agents,
             Err(error) => {
                 self.state.lock().await.clear();
+                self.completions.lock().await.observe(&[]);
                 return Err(error);
             }
         };
+        self.completions.lock().await.observe(&agents);
         self.state
             .lock()
             .await
@@ -328,6 +333,34 @@ impl Herdr {
         entry.running = true;
         running.insert(entry.capture.agent.name.clone());
         Some(entry.capture.clone())
+    }
+    pub async fn next_completion(&self) -> Option<Completion> {
+        let candidates: Vec<_> = self
+            .state
+            .lock()
+            .await
+            .values()
+            .filter(|entry| {
+                entry.route == Some(Route::Ignore)
+                    && !entry.running
+                    && entry.question.is_none()
+                    && entry.changed.elapsed() >= Duration::from_secs(2)
+            })
+            .map(|entry| entry.capture.clone())
+            .collect();
+        let mut completions = self.completions.lock().await;
+        candidates
+            .iter()
+            .find_map(|capture| completions.claim(capture))
+    }
+    pub async fn completion_current(&self, completion: &Completion) -> bool {
+        if !self.completions.lock().await.current(completion) {
+            return false;
+        }
+        self.current(&completion.capture).await
+    }
+    pub async fn finish_completion(&self, completion: &Completion, result: Result<(), bool>) {
+        self.completions.lock().await.finish(completion, result);
     }
     pub async fn current(&self, capture: &Capture) -> bool {
         let matches = self
@@ -811,6 +844,38 @@ mod tests {
                 .map(|s| String::from_utf8(s.to_vec()).unwrap())
                 .collect()
         }
+    }
+    #[tokio::test]
+    async fn completion_requires_a_work_cycle_and_a_settled_screen_without_questions() {
+        let f = ControlFixture::new("working").await;
+        fs::write(&f.roster, roster("t1", "idle").to_string()).unwrap();
+        fs::write(&f.screen, "Implemented the change. Tests passed.").unwrap();
+        f.client.poll().await.unwrap();
+        let capture = f.client.capture(&f.expected.name).await.unwrap();
+        // Settling time and detector outcome are both required.
+        assert!(f.client.next_completion().await.is_none());
+        f.client
+            .state
+            .lock()
+            .await
+            .get_mut(&f.expected.name)
+            .unwrap()
+            .changed = Instant::now() - Duration::from_secs(3);
+        assert!(f.client.next_completion().await.is_none());
+        f.client.mark_detection(&capture, Route::Conversation).await;
+        assert!(f.client.next_completion().await.is_none());
+        f.client.mark_detection(&capture, Route::Ignore).await;
+        let item = f.client.next_completion().await.unwrap();
+        assert!(f.client.completion_current(&item).await);
+        assert!(f.client.next_completion().await.is_none());
+        fs::write(&f.screen, "An updated result.").unwrap();
+        assert!(!f.client.completion_current(&item).await);
+        f.client.finish_completion(&item, Err(false)).await;
+        f.client.poll().await.unwrap();
+        fs::write(&f.roster, roster("t1", "working").to_string()).unwrap();
+        f.client.poll().await.unwrap();
+        assert!(!f.client.completion_current(&item).await);
+        assert!(!f.log.exists()); // Observation never sends input.
     }
     #[tokio::test]
     async fn input_delivery_approves_once_denies_and_consumes_the_question() {

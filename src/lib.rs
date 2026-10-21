@@ -1,4 +1,5 @@
 pub mod agent;
+mod completion;
 pub mod config;
 pub mod controller;
 mod coordinator;

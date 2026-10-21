@@ -338,6 +338,7 @@ impl Controller {
         let mut tasks = JoinSet::new();
         tasks.spawn(runtime.coordinator.run(runtime.messages));
         tasks.spawn(self.clone().poll_worker());
+        tasks.spawn(self.clone().completion_worker());
         // Keep slow extraction separate from status/voice processing.
         for _ in 0..2 {
             tasks.spawn(self.clone().dialog_worker());
@@ -445,6 +446,81 @@ impl Controller {
                 )?,
             }
             herdr.finish(&capture).await;
+        }
+    }
+
+    async fn completion_worker(self: Arc<Self>) -> Result<()> {
+        loop {
+            let Some(completion) = self.agents.next_completion().await else {
+                sleep(Duration::from_millis(250)).await;
+                continue;
+            };
+            let scope = self.snapshots.borrow().scope.clone();
+            let agent = &completion.capture.agent;
+            self.trace(
+                &scope,
+                Activity::new(
+                    &completion.id,
+                    "summary",
+                    "summarizing",
+                    false,
+                    json!({"observation":true}),
+                )
+                .linked(None, Some(agent.name.clone())),
+            )?;
+            let result = self
+                .intent
+                .summarize_completion(&agent.display_name, &completion.capture.screen)
+                .await;
+            // Recheck the work cycle as well as the terminal: identical text after
+            // another turn must never make an old summary current again.
+            if !self.agents.completion_current(&completion).await {
+                self.trace(
+                    &scope,
+                    Activity::new(
+                        &completion.id,
+                        "summary",
+                        "stale",
+                        true,
+                        json!({"observation":true}),
+                    ),
+                )?;
+                self.agents.finish_completion(&completion, Err(false)).await;
+                continue;
+            }
+            let delivered = match result {
+                Ok(Some(speech)) => {
+                    self.ask(|reply| Message::CompletionSummary {
+                        scope: scope.clone(),
+                        id: completion.id.clone(),
+                        agent: agent.clone(),
+                        speech,
+                        reply,
+                    })
+                    .await
+                }
+                Ok(None) => {
+                    self.trace(&scope, Activity::new(&completion.id, "summary", "ignored", true,
+                        json!({"reason":"No finished assistant response in the current screen"})))?;
+                    Ok(())
+                }
+                Err(error) => Err(error),
+            };
+            if let Err(error) = &delivered {
+                self.trace(
+                    &scope,
+                    Activity::new(
+                        &completion.id,
+                        "summary",
+                        "failed",
+                        true,
+                        json!({"reason":redact(&format!("{error:#}"))}),
+                    ),
+                )?;
+            }
+            self.agents
+                .finish_completion(&completion, delivered.map_err(|_| true))
+                .await;
         }
     }
 
@@ -1090,6 +1166,7 @@ mod tests {
             epoch: snapshot.speech_epoch,
             automatic: true,
             question_id: None,
+            completion_agent: None,
         };
         let mut stale = make("stale");
         stale.scope.epoch = "old lifetime".into();

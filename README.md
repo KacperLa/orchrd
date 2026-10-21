@@ -17,14 +17,15 @@ questions and routes your requests; a separate model extracts question text and
 choices. The same pipeline works across recognized agent types, including Codex
 and NOBS, without agent-specific connectors or launch wrappers.
 
-**Experimental:** question detection and terminal interaction still need testing
-across more agent UIs. Automatic completion summaries are not implemented; ask
-Orchrd to read an agent for a summary of its current visible output.
+**Experimental:** question detection, completion summaries, and terminal
+interaction still need testing across more agent UIs. Summaries use the current
+visible terminal text, so a truncated response can be missed.
 
 ## What you can do
 
 - Send work to a named agent, locally or on a saved remote machine.
 - Hear an agent's current question and its numbered choices.
+- Hear a short summary when an observed agent finishes responding.
 - Answer with a choice, multiple selections, or custom text when supported.
 - Approve a request once, deny it, or explicitly select a persistent permission.
 - Cancel agent work, request a readout, and repeat the last spoken response.
@@ -299,6 +300,10 @@ flowchart LR
     Detect --> Extract[Intent model: extract question and choices]
     Extract --> Check[Grounding and freshness checks]
     Check --> Present[Activity window and optional speech]
+    Detect --> Finished[Observed work ends with no question]
+    Finished --> Summary[Intent model: summarize latest response]
+    Summary --> Fresh[Check capture and work cycle]
+    Fresh --> Present
     Voice[Voice] --> STT[Transcription API]
     STT --> Route[System One: operation and target]
     Text[Text request] --> Route
@@ -313,10 +318,19 @@ visible screens are read for idle, done, or blocked agents. Changed screens must
 settle before two background workers detect and extract current questions.
 Unchanged screens are attempted once unless explicitly rescanned.
 
+Automatic completion summaries follow observed work cycles. After an agent moves
+from working to idle or done, the screen must settle and pass question detection
+before the intent model identifies and summarizes its latest finished response.
+A separate worker retries summary failures up to three times. Each work cycle
+is announced once; startup idle agents do not replay old output. Summaries are
+discarded if the capture changes during generation, and queued speech is
+invalidated if the agent resumes work, is replaced, disappears, or has a question.
+Muted mode keeps summaries in activity and history without speaking them.
+
 | Configuration | Role |
 | --- | --- |
 | `[routing]` | System One operation/target selection, dialog detection, and answer interpretation |
-| `[intent]` | Structured question extraction, work-request drafting, and requested summaries |
+| `[intent]` | Structured question extraction, work-request drafting, and response summaries |
 | `[stt.api]` | Transcription after microphone release |
 | `[tts]` | Local Pocket TTS or streaming API speech |
 

@@ -80,12 +80,23 @@ pub struct Speech {
     pub text: String,
     pub automatic: bool,
     pub question_id: Option<String>,
+    pub completion_agent: Option<AgentInfo>,
 }
 impl Speech {
     pub fn current(&self, snapshot: &Snapshot) -> bool {
         self.scope == snapshot.scope
             && self.epoch == snapshot.speech_epoch
             && (!self.automatic || snapshot.announcement_mode == AnnouncementMode::Auto)
+            && self.completion_agent.as_ref().is_none_or(|expected| {
+                snapshot
+                    .agents
+                    .iter()
+                    .any(|agent| completion_matches(expected, agent))
+                    && !snapshot
+                        .observed_questions
+                        .iter()
+                        .any(|q| q["agent_name"] == expected.name)
+            })
             && self.question_id.as_ref().is_none_or(|id| {
                 snapshot
                     .observed_questions
@@ -146,6 +157,13 @@ pub enum Message {
         scope: Scope,
         questions: Vec<Value>,
     },
+    CompletionSummary {
+        scope: Scope,
+        id: String,
+        agent: AgentInfo,
+        speech: String,
+        reply: oneshot::Sender<Result<()>>,
+    },
     ReadObservedQuestion {
         scope: Scope,
         agent_name: String,
@@ -175,6 +193,13 @@ pub enum Message {
 }
 struct Observation {
     agent: AgentInfo,
+}
+fn completion_matches(expected: &AgentInfo, live: &AgentInfo) -> bool {
+    expected.name == live.name
+        && expected.instance_id == live.instance_id
+        && expected.state_change_seq == live.state_change_seq
+        && expected.status == live.status
+        && matches!(live.status.as_str(), "idle" | "done")
 }
 struct Pending {
     scope: Scope,
@@ -264,6 +289,16 @@ impl Coordinator {
         text: String,
         automatic: bool,
     ) -> Result<()> {
+        self.queue_bound_speech(scope, id, text, automatic, None)
+    }
+    fn queue_bound_speech(
+        &mut self,
+        scope: &Scope,
+        id: String,
+        text: String,
+        automatic: bool,
+        completion_agent: Option<AgentInfo>,
+    ) -> Result<()> {
         if scope != &self.snapshot.scope {
             return Ok(());
         }
@@ -290,6 +325,7 @@ impl Coordinator {
             id: id.clone(),
             text,
             automatic,
+            completion_agent,
             question_id: self
                 .snapshot
                 .observed_questions
@@ -528,6 +564,56 @@ impl Coordinator {
                         self.queue_speech(&scope, question.question_id, speech, true)?;
                     }
                 }
+            }
+            Message::CompletionSummary {
+                scope,
+                id,
+                agent,
+                speech,
+                reply,
+            } => {
+                let result = (|| {
+                    self.check_scope(&scope)?;
+                    if !self
+                        .snapshot
+                        .agents
+                        .iter()
+                        .any(|live| completion_matches(&agent, live))
+                        || self
+                            .snapshot
+                            .observed_questions
+                            .iter()
+                            .any(|q| q["agent_name"] == agent.name)
+                    {
+                        bail!("The completed response is no longer current")
+                    }
+                    let speech = crate::tts::plain_speech(&format!(
+                        "{}. {}",
+                        agent.display_name,
+                        concise_speech(&speech)
+                    ));
+                    self.db.append(
+                        &scope.session,
+                        "assistant",
+                        Some(&agent.name),
+                        "completion_summary",
+                        &speech,
+                    )?;
+                    self.snapshot.message = Some(speech.clone());
+                    self.trace(
+                        Activity::new(&id, "summary", "presented", true, json!({"speech":speech}))
+                            .linked(None, Some(agent.name.clone())),
+                    );
+                    let _ = self.events.send(Event::Completion {
+                        agent_name: agent.name.clone(),
+                        speech: speech.clone(),
+                    });
+                    if self.snapshot.announcement_mode == AnnouncementMode::Auto {
+                        self.queue_bound_speech(&scope, id, speech, true, Some(agent))?;
+                    }
+                    Ok(())
+                })();
+                let _ = reply.send(result);
             }
             Message::ReadObservedQuestion {
                 scope,
@@ -835,6 +921,58 @@ fn operation_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completion_summaries_use_auto_policy_and_expire_when_work_resumes() {
+        for mode in [AnnouncementMode::Auto, AnnouncementMode::Muted] {
+            let (mut c, mut audio) = fixture();
+            c.snapshot.announcement_mode = mode;
+            let scope = c.snapshot.scope.clone();
+            let done = agent("idle", 3);
+            c.observe(scope.clone(), vec![done.clone()]).unwrap();
+            let (reply, mut receipt) = oneshot::channel();
+            c.handle(Message::CompletionSummary {
+                scope: scope.clone(),
+                id: "finished".into(),
+                agent: done.clone(),
+                speech: "The fix passed its tests.".into(),
+                reply,
+            })
+            .unwrap();
+            receipt.try_recv().unwrap().unwrap();
+            assert!(c
+                .snapshot
+                .message
+                .as_ref()
+                .unwrap()
+                .contains("passed its tests"));
+            if mode == AnnouncementMode::Auto {
+                let speech = audio.try_recv().unwrap();
+                assert!(speech.current(&c.snapshot));
+                c.snapshot
+                    .observed_questions
+                    .push(json!({"agent_name":"coder"}));
+                assert!(!speech.current(&c.snapshot));
+                c.snapshot.observed_questions.clear();
+                c.observe(scope.clone(), vec![agent("working", 4)]).unwrap();
+                assert!(!speech.current(&c.snapshot));
+            } else {
+                assert!(audio.try_recv().is_err());
+            }
+            c.observe(scope.clone(), vec![agent("working", 4)]).unwrap();
+            let (reply, mut receipt) = oneshot::channel();
+            c.handle(Message::CompletionSummary {
+                scope,
+                id: "late".into(),
+                agent: done,
+                speech: "Stale result".into(),
+                reply,
+            })
+            .unwrap();
+            assert!(receipt.try_recv().unwrap().is_err());
+            assert!(audio.try_recv().is_err());
+        }
+    }
 
     #[test]
     fn inferred_permissions_are_read_only_deduplicated_and_speech_tracks_the_screen() {
