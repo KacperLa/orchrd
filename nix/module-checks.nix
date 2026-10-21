@@ -68,6 +68,8 @@ assert builtins.attrNames standalone.options.services.orchrd == [
   "configFile" "enable" "enablePocketTts" "environmentFile" "package"
 ];
 assert enabled.systemd.services.apple-remote-mouse.serviceConfig.User == "alice";
+assert pkgs.lib.hasInfix "--edge-mm 2 --corner-mm 4"
+  enabled.systemd.services.apple-remote-mouse.serviceConfig.ExecStart;
 assert enabled.systemd.services.apple-remote-mic.environment.XDG_RUNTIME_DIR == "/run/user/1234";
 assert pkgs.lib.hasInfix "--mac AA:BB:CC:DD:EE:FF"
   enabled.systemd.services.apple-remote-mic.serviceConfig.ExecStart;

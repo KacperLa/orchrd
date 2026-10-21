@@ -16,7 +16,14 @@ from dbus_next import BusType
 from dbus_next.aio import MessageBus
 from evdev import UInput, ecodes as e
 
-from apple_remote_zones import Region, TouchZones, ZoneConfig
+from apple_remote_zones import (
+    DEFAULT_CORNER_MM,
+    DEFAULT_EDGE_MM,
+    DEFAULT_SCROLL_STEP_MM,
+    Region,
+    TouchZones,
+    ZoneConfig,
+)
 
 APPLE_VENDOR = "0000004C"
 APPLE_REMOTE_PRODUCT = "0000026D"
@@ -74,8 +81,9 @@ class TouchMouse:
         acceleration: float = 0.0,
         acceleration_threshold: float = 80.0,
         interpolation_seconds: float = 0.0,
-        edge_mm: float = 4.0,
-        scroll_step_mm: float = 3.0,
+        edge_mm: float = DEFAULT_EDGE_MM,
+        corner_mm: float = DEFAULT_CORNER_MM,
+        scroll_step_mm: float = DEFAULT_SCROLL_STEP_MM,
     ) -> None:
         self.ui = ui
         self.x_scale = x_scale
@@ -85,10 +93,12 @@ class TouchMouse:
         self.interpolation_seconds = interpolation_seconds
         self.zones = TouchZones(
             self.PAD_SIZE_MM,
-            ZoneConfig(edge_mm=edge_mm, scroll_step_mm=scroll_step_mm),
+            ZoneConfig(edge_mm=edge_mm, corner_mm=corner_mm, scroll_step_mm=scroll_step_mm),
         )
-        # Latched when a contact starts, so a wobbling edge swipe keeps scrolling.
+        # Latched when a contact starts, so a wobbling edge swipe keeps scrolling
+        # and a button-only click keeps the corner of the contact that made it.
         self.region = Region.CENTER
+        self.click_corner = False
         self.button_code = e.BTN_LEFT
         self.last_sample = None
         self.device_tick = None
@@ -131,6 +141,7 @@ class TouchMouse:
             self.device_tick = None
             self.last_sample = None
             self.region = Region.CENTER
+            self.click_corner = False
             self.zones.reset()
             self.cancel_motion()
         self.last_arrival = timestamp
@@ -140,17 +151,18 @@ class TouchMouse:
         continuing = (touch is not None and self.previous_touch is not None
                       and touch.identifier == self.previous_touch.identifier)
         if touch is not None and not continuing:
-            # Latch the strip for the whole contact: 4 mm is too narrow to track
+            # Latch the strip for the whole contact: the strip is too narrow to track
             # through a swipe, and drifting out of it must not start a drag.
             self.region = self.zones.region(touch.x, touch.y)
+            self.click_corner = self.zones.is_click_corner(touch.x, touch.y)
             self.zones.reset()
         clicked = bool(report[1] & 0x80)
         if clicked != self.button_down:
             if clicked:
                 # Button-only reports carry no coordinates; then the latched
                 # contact position decides, otherwise the current finger does.
-                corner = (self.zones.region(touch.x, touch.y) is Region.CORNER
-                          if touch is not None else self.region is Region.CORNER)
+                corner = (self.zones.is_click_corner(touch.x, touch.y)
+                          if touch is not None else self.click_corner)
                 self.button_code = e.BTN_RIGHT if corner else e.BTN_LEFT
             self.cancel_motion()
             self.ui.write(e.EV_KEY, self.button_code, int(clicked))
@@ -219,6 +231,7 @@ class TouchMouse:
         if touch is None:
             self.previous_timestamp = None
             self.region = Region.CENTER
+            self.click_corner = False
             self.zones.reset()
         else:
             self.previous_timestamp = timestamp
@@ -286,6 +299,7 @@ class TouchMouse:
         self.cancel_motion()
         self.zones.reset()
         self.region = Region.CENTER
+        self.click_corner = False
         for key in self.keys_down:
             self.ui.write(e.EV_KEY, key, 0)
         if self.keys_down:
@@ -362,8 +376,9 @@ async def run(args: argparse.Namespace) -> None:
             args.acceleration,
             args.acceleration_threshold,
             args.interpolation_ms / 1000.0,
-            args.edge_mm,
-            args.scroll_step_mm,
+            edge_mm=args.edge_mm,
+            corner_mm=args.corner_mm,
+            scroll_step_mm=args.scroll_step_mm,
         )
         bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         loop = asyncio.get_running_loop()
@@ -506,16 +521,29 @@ def main() -> None:
     parser.add_argument(
         "--edge-mm",
         type=float,
-        default=4.0,
+        default=DEFAULT_EDGE_MM,
         metavar="MILLIMETERS",
-        help="width of the right/top scroll strips (default: 4)",
+        help=f"width of the right/top scroll strips (default: {DEFAULT_EDGE_MM:g})",
+    )
+    parser.add_argument(
+        "--corner-mm",
+        type=float,
+        default=DEFAULT_CORNER_MM,
+        metavar="MILLIMETERS",
+        help=(
+            "side of the top-right right-click zone; at least --edge-mm "
+            f"(default: {DEFAULT_CORNER_MM:g})"
+        ),
     )
     parser.add_argument(
         "--scroll-step-mm",
         type=float,
-        default=3.0,
+        default=DEFAULT_SCROLL_STEP_MM,
         metavar="MILLIMETERS",
-        help="finger travel per scroll notch in the edge strips (default: 3)",
+        help=(
+            "finger travel per scroll notch in the edge strips "
+            f"(default: {DEFAULT_SCROLL_STEP_MM:g})"
+        ),
     )
     parser.add_argument(
         "--output-rate",
@@ -537,6 +565,8 @@ def main() -> None:
         parser.error("--interpolation-ms cannot be negative")
     if args.edge_mm <= 0:
         parser.error("--edge-mm must be greater than zero")
+    if args.corner_mm < args.edge_mm:
+        parser.error("--corner-mm must be at least --edge-mm")
     if args.scroll_step_mm <= 0:
         parser.error("--scroll-step-mm must be greater than zero")
     if args.output_rate <= 0:
