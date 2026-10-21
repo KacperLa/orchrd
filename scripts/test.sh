@@ -37,6 +37,10 @@ exec nix develop "path:$repo_root" --command bash -euo pipefail -c '
     env -u PYTHONPATH -u PYTHONHOME \
         "$ORCHRD_BRIDGE_PYTHON" -m unittest discover -s adapters
 
+    echo "Running Apple TV remote tests..."
+    env -u PYTHONPATH -u PYTHONHOME \
+        python3 -m unittest discover -s apple_tv_remote
+
     echo "Running TTS worker tests..."
     env -u PYTHONPATH -u PYTHONHOME \
         "$ORCHRD_TEST_PYTHON" -m unittest discover -s tts
