@@ -106,6 +106,7 @@
           ];
           postCheck = ''
             gjs extension/test-lifecycle.js
+            python3 -m unittest discover -s apple_tv_remote
             python3 -m unittest discover -s tts
             ${bridgePython}/bin/python -m unittest discover -s adapters
             env -u GIO_EXTRA_MODULES -u GIO_MODULE_DIR GI_TYPELIB_PATH="${activityTypelibs}" GDK_BACKEND=x11 \
