@@ -23,11 +23,30 @@ X_MIN, X_MAX = CONFIG.x_min, CONFIG.x_max
 Y_MIN, Y_MAX = CONFIG.y_min, CONFIG.y_max
 X_PER_MM = (X_MAX - X_MIN) / PAD_SIZE_MM
 Y_PER_MM = (Y_MAX - Y_MIN) / PAD_SIZE_MM
-# 2 mm inside the 4 mm edge strips.
 CENTER = (X_MIN + (X_MAX - X_MIN) // 2, Y_MIN + (Y_MAX - Y_MIN) // 2)
-RIGHT = (X_MAX - 2 * X_PER_MM, CENTER[1])
-TOP = (CENTER[0], Y_MAX - 2 * Y_PER_MM)
-TOP_RIGHT = (X_MAX - 2 * X_PER_MM, Y_MAX - 2 * Y_PER_MM)
+
+
+def inside_right(mm):
+    """A point `mm` inside the pad's measured right extreme, at mid height."""
+    return (round(X_MAX - mm * X_PER_MM), CENTER[1])
+
+
+def inside_top(mm):
+    return (CENTER[0], round(Y_MAX - mm * Y_PER_MM))
+
+
+def inside_corner(mm):
+    return (round(X_MAX - mm * X_PER_MM), round(Y_MAX - mm * Y_PER_MM))
+
+
+# One millimetre in: only reachable with the finger rolled against the remote's side.
+RIGHT = inside_right(1)
+TOP = inside_top(1)
+TOP_RIGHT = inside_corner(1)
+# Three millimetres in: inside the right-click corner but outside the scroll strips.
+POINTER_RIGHT = inside_right(3)
+POINTER_TOP = inside_top(3)
+CLICK_CORNER = inside_corner(3)
 
 
 class FakeUInput:
@@ -51,7 +70,7 @@ class FakeUInput:
 
 class ZoneRegions(unittest.TestCase):
     def setUp(self):
-        self.zones = TouchZones(PAD_SIZE_MM, ZoneConfig(edge_mm=4.0))
+        self.zones = TouchZones(PAD_SIZE_MM, ZoneConfig())
 
     def test_center_is_outside_the_strips(self):
         self.assertIs(self.zones.region(*CENTER), Region.CENTER)
@@ -67,9 +86,24 @@ class ZoneRegions(unittest.TestCase):
 
     def test_strip_width_is_configurable(self):
         zones = TouchZones(PAD_SIZE_MM, ZoneConfig(edge_mm=8.0))
-        six_mm_inside = (X_MAX - 6 * X_PER_MM, CENTER[1])
-        self.assertIs(zones.region(*six_mm_inside), Region.RIGHT)
-        self.assertIs(self.zones.region(*six_mm_inside), Region.CENTER)
+        self.assertIs(zones.region(*inside_right(6)), Region.RIGHT)
+        self.assertIs(self.zones.region(*inside_right(6)), Region.CENTER)
+
+    def test_strips_leave_room_for_unintended_mouse_movement(self):
+        # A finger a few millimetres in from the edge is pointer movement.
+        self.assertIs(self.zones.region(*POINTER_RIGHT), Region.CENTER)
+        self.assertIs(self.zones.region(*POINTER_TOP), Region.CENTER)
+
+    def test_click_corner_is_wider_than_the_scroll_corner(self):
+        # The corner right-click stays easy to hit without widening diagonal scrolling.
+        self.assertIs(self.zones.region(*CLICK_CORNER), Region.CENTER)
+        self.assertTrue(self.zones.is_click_corner(*CLICK_CORNER))
+        self.assertTrue(self.zones.is_click_corner(*TOP_RIGHT))
+
+    def test_click_corner_needs_both_edges(self):
+        self.assertFalse(self.zones.is_click_corner(*RIGHT))
+        self.assertFalse(self.zones.is_click_corner(*TOP))
+        self.assertFalse(self.zones.is_click_corner(*CENTER))
 
 
 class MeasuredPadGeometry(unittest.TestCase):
@@ -151,7 +185,7 @@ class MouseIntegration(unittest.TestCase):
     def setUp(self):
         self.ui = FakeUInput()
         # One millimetre of finger travel per notch keeps the assertions short.
-        self.mouse = TouchMouse(self.ui, 1.0, 1.0, edge_mm=4.0, scroll_step_mm=1.0)
+        self.mouse = TouchMouse(self.ui, 1.0, 1.0, scroll_step_mm=1.0)
         self.builder = ReportBuilder()
 
     def send(self, seconds, x=None, y=None, buttons=0):
@@ -190,6 +224,15 @@ class MouseIntegration(unittest.TestCase):
         self.assertEqual(self.ui.rels(ecodes.REL_WHEEL), [])
         self.assertEqual(self.ui.rels(ecodes.REL_HWHEEL), [])
 
+    def test_drag_just_inside_the_strip_moves_the_pointer(self):
+        # Contacts that only brush the edge region must not turn into scrolls.
+        self.drag(POINTER_RIGHT, 0, 40)
+        self.drag(POINTER_TOP, -40, 0)
+        self.assertNotEqual(self.ui.rels(ecodes.REL_X), [])
+        self.assertNotEqual(self.ui.rels(ecodes.REL_Y), [])
+        self.assertEqual(self.ui.rels(ecodes.REL_WHEEL), [])
+        self.assertEqual(self.ui.rels(ecodes.REL_HWHEEL), [])
+
     def test_pressed_edge_drag_still_scrolls(self):
         x, y = RIGHT
         self.send(0.02, x, y, buttons=0x80)
@@ -221,6 +264,21 @@ class MouseIntegration(unittest.TestCase):
         self.send(0.02, *TOP_RIGHT)
         self.assertEqual([value for _, _, value in self.ui.keys(ecodes.BTN_RIGHT)], [1, 0])
         self.assertEqual(self.ui.keys(ecodes.BTN_LEFT), [])
+
+    def test_click_corner_click_is_a_right_click(self):
+        # The wider click corner than the scroll strips only affects clicks.
+        self.send(0.02, *CLICK_CORNER)
+        self.send(0.02, *CLICK_CORNER, buttons=0x80)
+        self.send(0.02, *CLICK_CORNER)
+        self.assertEqual([value for _, _, value in self.ui.keys(ecodes.BTN_RIGHT)], [1, 0])
+        self.assertEqual(self.ui.rels(ecodes.REL_WHEEL), [])
+
+    def test_drag_in_the_click_corner_moves_the_pointer(self):
+        self.drag(CLICK_CORNER, -40, -40)
+        self.assertNotEqual(self.ui.rels(ecodes.REL_X), [])
+        self.assertNotEqual(self.ui.rels(ecodes.REL_Y), [])
+        self.assertEqual(self.ui.rels(ecodes.REL_WHEEL), [])
+        self.assertEqual(self.ui.rels(ecodes.REL_HWHEEL), [])
 
     def test_center_click_stays_a_left_click(self):
         self.send(0.02, *CENTER)

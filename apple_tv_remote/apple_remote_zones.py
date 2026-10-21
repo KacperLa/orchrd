@@ -1,8 +1,10 @@
 """Edge scroll strips and the corner right-click for the Siri Remote touch pad.
 
 The outer strip on the right scrolls vertically; the outer strip at the top
-scrolls horizontally. Their intersection is the corner that turns a mechanical
-click into a right click.
+scrolls horizontally. A mechanical click near the top-right corner is a right
+click. Scroll strips and the click corner are sized independently: the strips stay
+narrow so only a finger pressed against the remote's side scrolls, while the
+click corner stays large enough to hit deliberately.
 
 The pad does NOT report coordinates centered on zero, so the strips are defined
 against the measured extent of reachable finger positions (see ZoneConfig).
@@ -10,6 +12,12 @@ against the measured extent of reachable finger positions (see ZoneConfig).
 
 from dataclasses import dataclass
 from enum import Enum
+
+# Narrow enough that only a contact rolled against the remote's own side reaches
+# it; anything further in is pointer movement.
+DEFAULT_EDGE_MM = 2.0
+DEFAULT_CORNER_MM = 4.0
+DEFAULT_SCROLL_STEP_MM = 3.0
 
 
 class Region(Enum):
@@ -21,8 +29,9 @@ class Region(Enum):
 
 @dataclass(frozen=True)
 class ZoneConfig:
-    edge_mm: float = 4.0
-    scroll_step_mm: float = 3.0
+    edge_mm: float = DEFAULT_EDGE_MM
+    corner_mm: float = DEFAULT_CORNER_MM
+    scroll_step_mm: float = DEFAULT_SCROLL_STEP_MM
     # Measured by sweeping an A1513 pad to all four extremes: x and y grow
     # toward the right and top, and the pad's box is far from the origin.
     x_min: int = -1818
@@ -52,6 +61,11 @@ class TouchZones:
         if top:
             return Region.TOP
         return Region.CENTER
+
+    def is_click_corner(self, x: int, y: int) -> bool:
+        """Whether a mechanical click here is a right click."""
+        corner = self.config.corner_mm
+        return self.right_edge_mm(x) <= corner and self.top_edge_mm(y) <= corner
 
     def right_edge_mm(self, x: int) -> float:
         """Distance inside the pad from the right edge; clamps outside the pad."""

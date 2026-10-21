@@ -18,6 +18,12 @@ let
     "--mac"
     cfg.macAddress
   ];
+  zoneArguments = lib.escapeShellArgs [
+    "--edge-mm"
+    (toString cfg.edgeMm)
+    "--corner-mm"
+    (toString cfg.cornerMm)
+  ];
   python = pkgs.python3.withPackages (ps: [
     ps.dbus-next
     ps.evdev
@@ -63,6 +69,25 @@ in
       example = "AA:BB:CC:DD:EE:FF";
       description = "Bluetooth address of the paired Apple TV remote";
     };
+    edgeMm = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 2;
+      example = 3;
+      description = ''
+        Width of the right and top scroll strips, measured inward from the pad's
+        outer extreme. Narrow strips only scroll for a finger pressed against the
+        remote's side; wider ones catch pointer movement as scrolling.
+      '';
+    };
+    cornerMm = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 4;
+      example = 5;
+      description = ''
+        Side of the top-right corner zone where clicking is a right click. Must be
+        at least edgeMm so the click target reaches past the scroll strips.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -71,6 +96,10 @@ in
         assertion =
           builtins.hasAttr cfg.user config.users.users && config.users.users.${cfg.user}.uid != null;
         message = "services.apple-tv-remote.user must name an existing user with users.users.<name>.uid set.";
+      }
+      {
+        assertion = cfg.cornerMm >= cfg.edgeMm;
+        message = "services.apple-tv-remote.cornerMm must be at least edgeMm.";
       }
     ];
     hardware.bluetooth.enable = true;
@@ -82,7 +111,7 @@ in
       description = "Apple remote touchpad and automatic Bluetooth connection";
       serviceConfig = protection // {
         SupplementaryGroups = [ "uinput" ];
-        ExecStart = "${python}/bin/python ${source}/apple_remote_mouse.py ${macArgument}";
+        ExecStart = "${python}/bin/python ${source}/apple_remote_mouse.py ${macArgument} ${zoneArguments}";
       };
     };
     systemd.services.apple-remote-mic = common // {
