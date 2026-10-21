@@ -32,7 +32,7 @@ visible terminal text, so a truncated response can be missed.
   purpose is unavailable, Orchrd asks you to check the terminal before approving.
 - Cancel agent work, request a readout, and repeat the last spoken response.
 - Inspect routing, extraction, delivery, and speech in a native GTK activity window.
-- Use your desktop microphone or an optional Apple TV remote.
+- Use your desktop microphone.
 
 Start coding agents normally inside Herdr. Orchrd discovers existing agents and
 leaves their models, sessions, and terminal processes under their own control.
@@ -50,7 +50,7 @@ leaves their models, sessions, and terminal processes under their own control.
   or local Pocket TTS assets.
 
 Orchrd runs as a user service. NixOS is required only for the optional Apple TV
-remote module, which handles system Bluetooth and uinput access.
+remote module, which handles system Bluetooth access.
 
 ## Setup
 
@@ -392,16 +392,11 @@ separately. Disabling its worker does not remove Pocket TTS from the package.
 
 ## Optional Apple TV remote
 
-The remote has its own NixOS flake under [`apple_tv_remote/`](apple_tv_remote/).
-It provides a Bluetooth touchpad through uinput and an Opus microphone through
-PipeWire. Holding Siri selects the remote microphone and starts recording;
-release drains the audio, submits it to Orchrd, and restores the previous input
-unless you changed sources while recording.
-
-Dragging the touchpad's right edge scrolls vertically, dragging its top edge
-scrolls horizontally, and a mechanical click in the top-right corner is a right
-click. The shared zone definitions live in
-[`apple_remote_zones.py`](apple_tv_remote/apple_remote_zones.py).
+The remote has its own flake under [`apple_tv_remote/`](apple_tv_remote/). It is
+a standalone Rust daemon that establishes the remote's Bluetooth connection and
+keeps its HID reports flowing, and it is intended to move to its own repository.
+It replaces the previous Python mouse and microphone daemons, which are gone;
+touchpad, button and microphone handling is not implemented yet.
 
 Add this separate input to your NixOS flake:
 
@@ -423,22 +418,25 @@ In a host module with `apple-tv-remote` in scope:
     enable = true;
     user = "you";
     macAddress = "AA:BB:CC:DD:EE:FF";
-    edgeMm = 2; # Scroll strip width; raise it if edge scrolling feels unreachable.
-    cornerMm = 4; # Top-right right-click zone; must be at least edgeMm.
   };
 }
 ```
 
-Pair the remote first. The module configures Bluetooth/uinput permissions and
-creates the system services `apple-remote-mouse.service` and
-`apple-remote-mic.service`. It needs the selected user's PipeWire session and
-`orchrdctl` from the Home Manager setup. Rebuild NixOS to apply it.
+Pair the remote first. The module enables Bluetooth and creates the system
+service `apple-tv-remote.service`, which asks BlueZ to reconnect whenever the
+remote drops its idle connection and re-enables its input reports. Rebuild
+NixOS to apply it.
 
-The scroll strips are narrow on purpose: they are measured inward from the pad's
-measured extreme, which a finger only reaches when it is rolled against the
-remote's own side. Contacts further in move the pointer. Once a contact starts in
-a strip it keeps scrolling for the whole touch, so a swipe does not fall back to
-pointer movement when the finger drifts inward.
+### Working on the remote daemon
+
+The subproject builds without the rest of Orchrd. Its flake provides a
+development shell with the Rust toolchain:
+
+```bash
+cd apple_tv_remote
+nix develop
+cargo test
+```
 
 ## Diagnostics
 
@@ -460,7 +458,7 @@ performs the same checks using its service environment at startup.
 | A remote is missing | Run `herdr machine status --json` and its machine-specific `agent list`; check service SSH access |
 | A question is missing | Inspect detection/extraction activity, allow for model latency, then try `orchrdctl rescan` |
 | A question is read-only | Its controls could not be grounded; answer in the terminal |
-| Microphone returns no audio | Check the active PipeWire input, or the Apple remote microphone service |
+| Microphone returns no audio | Check the active PipeWire input |
 | Configuration fails after upgrading | Remove obsolete options listed below and run `doctor` with the service credentials |
 
 The activity window shows extraction, routing, delivery, and speech events, with
@@ -475,7 +473,7 @@ conversation history, settings, and receipts persist in SQLite.
 
 These locations follow the corresponding XDG directory settings. For local TTS,
 inspect `journalctl --user -u orchrd-tts.service -f`. Apple remote logs use system
-`journalctl -u apple-remote-mic.service` and `apple-remote-mouse.service`.
+`journalctl -u apple-tv-remote.service`.
 
 ### Upgrading from connector-based versions
 
@@ -496,7 +494,7 @@ response queues are archival and are never replayed.
 ```
 
 This enters the pinned Nix shell and runs formatting, Rust tests, Clippy, GNOME
-extension tests, Apple TV remote tests, TTS tests, and headless GTK tests. The default tests use local
+extension tests, TTS tests, and headless GTK tests. The default tests use local
 fixtures and need no API credentials or running agent. Live tests are explicitly
 ignored by default.
 
