@@ -382,6 +382,10 @@ PipeWire. Holding Siri selects the remote microphone and starts recording;
 release drains the audio, submits it to Orchrd, and restores the previous input
 unless you changed sources while recording.
 
+The touchpad's right edge scrolls vertically, its top edge scrolls horizontally,
+and a mechanical click in the top-right corner is a right click. The shared
+zone definitions live in [`apple_remote_zones.py`](apple_tv_remote/apple_remote_zones.py).
+
 Add this separate input to your NixOS flake:
 
 ```nix
@@ -467,7 +471,7 @@ response queues are archival and are never replayed.
 ```
 
 This enters the pinned Nix shell and runs formatting, Rust tests, Clippy, GNOME
-extension tests, TTS tests, and headless GTK tests. The default tests use local
+extension tests, Apple TV remote tests, TTS tests, and headless GTK tests. The default tests use local
 fixtures and need no API credentials or running agent. Live tests are explicitly
 ignored by default.
 
