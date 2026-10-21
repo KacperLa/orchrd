@@ -15,6 +15,37 @@ import struct
 import sys
 import subprocess
 
+# Keep speech through Bluetooth bursts instead of silently dropping old frames.
+MAX_PCM_BYTES = 120 * 16000 * 2
+
+
+class AudioDrain:
+    """Wait for late Bluetooth packets and the final PipeWire audio buffers."""
+    def __init__(self, clock=None, sleep=asyncio.sleep):
+        self.clock = clock or asyncio.get_running_loop().time
+        self.sleep = sleep
+        self.received_at = self.played_at = None
+        self.writing = False
+
+    async def wait(self, pcm_queue):
+        released_at = self.clock()
+        while True:
+            now = self.clock()
+            received_at = max(released_at, self.received_at or released_at)
+            played_at = self.played_at if self.played_at is not None else released_at
+            if (not pcm_queue and not self.writing and
+                    now - received_at >= 0.5 and now - played_at >= 0.2):
+                return
+            if now - released_at >= 10:
+                raise RuntimeError('Remote audio did not drain; recording cancelled')
+            await self.sleep(0.02)
+
+
+def take_pcm_frame(pcm_queue):
+    frame = bytes(pcm_queue[:640])
+    del pcm_queue[:len(frame)]
+    return frame + bytes(640 - len(frame))
+
 
 async def run_command(*args):
     process = await asyncio.create_subprocess_exec(
@@ -84,7 +115,7 @@ class SiriDictation:
         finally:
             await self.restore()
 
-    async def run(self, pcm_queue):
+    async def run(self, pcm_queue, audio_drain):
         while True:
             down = await self.events.get()
             try:
@@ -92,15 +123,17 @@ class SiriDictation:
                     if not self.owned:
                         await self.start()
                 elif self.owned:
-                    # Allow Bluetooth, our PCM queue, and PipeWire to drain.
-                    await asyncio.sleep(0.5)
-                    for _ in range(10):
-                        if not pcm_queue:
-                            break
-                        await asyncio.sleep(0.05)
+                    released_at = audio_drain.clock()
+                    queued_ms = len(pcm_queue) / 32
+                    await audio_drain.wait(pcm_queue)
+                    print(f'Siri audio drained: queued={queued_ms:.0f}ms '
+                          f'wait={audio_drain.clock() - released_at:.2f}s', flush=True)
                     await self.finish()
             except Exception as error:
                 print(f'Siri dictation: {error}', file=sys.stderr, flush=True)
+                if self.owned:
+                    await self.finish(cancel=True)
+                    pcm_queue.clear()
 
 
 class ATTAssembler:
@@ -341,6 +374,7 @@ async def bridge(args):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     pcm_queue = bytearray()
+    audio_drain = AudioDrain()
     stats = dict(frames=0, errors=0, sequence_skips=0, concealed=0,
                  underruns=0, peak=0)
     playout = dict(started=False, receiving=False)
@@ -378,7 +412,6 @@ async def bridge(args):
                     down = bool(report[1] & 0x10)
                     if down and not pressed:
                         decoder.reset()
-                        pcm_queue.clear()
                         previous = None
                         previous_arrival = None
                         playout['started'] = False
@@ -430,9 +463,9 @@ async def bridge(args):
                 stats['frames'] += 1
                 stats['peak'] = max(stats['peak'], max(abs(s[0]) for s in struct.iter_unpack('<h', pcm)))
                 pcm_queue.extend(pcm)
-                # Bound latency after transport bursts; never build an unlimited queue.
-                if len(pcm_queue) > 12800:
-                    del pcm_queue[:-12800]
+                audio_drain.received_at = loop.time()
+                if len(pcm_queue) > MAX_PCM_BYTES:
+                    raise RuntimeError('Remote audio backlog exceeds the two-minute limit')
 
         async def send():
             # Deliver 20 ms continuously. Holding six frames before starting
@@ -442,15 +475,19 @@ async def bridge(args):
                 if not playout['started'] and (len(pcm_queue) >= 3840 or
                         (pcm_queue and not playout['receiving'])):
                     playout['started'] = True
-                if playout['started'] and len(pcm_queue) >= 640:
-                    frame = bytes(pcm_queue[:640])
-                    del pcm_queue[:640]
+                has_audio = playout['started'] and bool(pcm_queue)
+                if has_audio:
+                    frame = take_pcm_frame(pcm_queue)
                 else:
                     frame = bytes(640)
                     if playout['started'] and playout['receiving']:
                         stats['underruns'] += 1
-                player.stdin.write(frame + bytes(640 - len(frame)))
+                audio_drain.writing = has_audio
+                player.stdin.write(frame)
                 await player.stdin.drain()
+                if has_audio:
+                    audio_drain.played_at = loop.time()
+                audio_drain.writing = False
                 deadline += 0.020
                 await asyncio.sleep(max(0, deadline - loop.time()))
                 if loop.time() > deadline + 0.1:
@@ -459,7 +496,7 @@ async def bridge(args):
         tasks = [asyncio.create_task(receive()), asyncio.create_task(send()),
                  asyncio.create_task(stop.wait()), asyncio.create_task(player.wait())]
         if dictation:
-            tasks.append(asyncio.create_task(dictation.run(pcm_queue)))
+            tasks.append(asyncio.create_task(dictation.run(pcm_queue, audio_drain)))
         print('Apple TV Remote Microphone created. Hold Siri to speak. '
               'Raw capture may request system authentication.', flush=True)
         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
