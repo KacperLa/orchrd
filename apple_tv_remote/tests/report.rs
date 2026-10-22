@@ -1,9 +1,10 @@
-//! ATT notification reassembly and A1513 input report parsing.
+//! ATT notification reassembly and A1513 report parsing.
 
 use apple_tv_remote::report::{
     connection_interval_ms, disconnection_handle, le_connection_handle,
     le_connection_update_command, parse_report, AttAssembler, InputReport,
 };
+use apple_tv_remote::touch::siri_pressed;
 
 const ATT_CID: u16 = 4;
 /// Characteristic value handle the remote notifies on.
@@ -108,8 +109,8 @@ fn continuation_fragments_are_reassembled() {
 fn a_large_notification_survives_many_fragments() {
     let mut assembler = AttAssembler::default();
     let mut out = Vec::new();
-    // A report with a 255 byte payload spans several fragments.
-    let mut report = vec![0x01, 0x00, 0x32, 0, 0, 0];
+    // An Opus report with a 300 byte payload spans several fragments.
+    let mut report = vec![0x10, 0x00, 0x00, 0x00, 0x07, 0x00, 0xFF];
     report.extend((0..255u8).cycle().take(255).collect::<Vec<u8>>());
     let fragments = fragmented(&report, 9);
     assert!(fragments.len() > 5, "test needs many fragments");
@@ -271,6 +272,18 @@ fn reports_are_classified() {
     let buttons = [0x00, 0x10];
     assert_eq!(parse_report(&buttons), Some(InputReport::Buttons(&buttons)));
 
+    let mut opus = vec![0x10, 0x00, 0x00, 0x00];
+    opus.extend_from_slice(&7u16.to_le_bytes());
+    opus.push(3);
+    opus.extend_from_slice(&[0xF8, 0xFF, 0xFE]);
+    match parse_report(&opus) {
+        Some(InputReport::Opus { sequence, payload }) => {
+            assert_eq!(payload, &[0xF8, 0xFF, 0xFE]);
+            assert_eq!(sequence, 7);
+        }
+        other => panic!("expected an Opus report, got {other:?}"),
+    }
+
     assert!(matches!(
         parse_report(&TOUCH_REPORT),
         Some(InputReport::Touch(_))
@@ -287,16 +300,34 @@ fn the_touch_report_id_is_stripped_before_decoding() {
         Some(InputReport::Touch(body)) => assert_eq!(body, &TOUCH_REPORT[..]),
         other => panic!("expected a touch report, got {other:?}"),
     }
+    // The Opus report has its own report ID and must not be affected.
+    let opus = [0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0xF8, 0xFF];
+    assert!(matches!(
+        parse_report(&opus),
+        Some(InputReport::Opus { .. })
+    ));
 }
 
 #[test]
-fn unrecognized_report_ids_are_rejected() {
-    // A report id the daemon does not know is not classified.
-    let unknown = vec![0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0xF8, 0xFF];
-    assert_eq!(parse_report(&unknown), None);
-    let mut touch = vec![0x01, 0x00, 0x32];
-    touch.extend((0..30u8).collect::<Vec<u8>>());
-    assert!(matches!(parse_report(&touch), Some(InputReport::Touch(_))));
+fn opus_reports_require_their_full_length() {
+    // Declared length exceeds the report.
+    let mut opus = vec![0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x20];
+    opus.extend_from_slice(&[0u8; 4]);
+    assert_eq!(parse_report(&opus), None);
+    // A zero length carries no audio.
+    let mut opus = vec![0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00];
+    opus.extend_from_slice(&[0u8; 4]);
+    assert_eq!(parse_report(&opus), None);
+}
+
+#[test]
+fn the_two_byte_report_carries_siri_and_the_other_buttons() {
+    assert!(siri_pressed(&[0x00, 0x10]));
+    assert!(!siri_pressed(&[0x00, 0x00]));
+    // A click, Play/Pause or Menu report is not a Siri press.
+    assert!(!siri_pressed(&[0x00, 0x80]));
+    assert!(!siri_pressed(&[0x00, 0x08]));
+    assert!(!siri_pressed(&[0x00, 0x20]));
 }
 
 /// The address is reported least significant byte first, and only a successful

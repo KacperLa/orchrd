@@ -1,32 +1,39 @@
-//! Apple TV Siri Remote support: touchpad and buttons.
+//! Apple TV Siri Remote support: touchpad, buttons and Opus microphone.
 //!
-//! One process replaces the previous Python mouse daemon. A single HCI monitor
-//! socket delivers the HID input notifications, so the touchpad and buttons
-//! share one Bluetooth capture path, and pointer motion is emitted through
-//! uinput.
+//! One process replaces the previous pair of Python daemons. A single HCI
+//! monitor socket delivers both the HID input notifications and the Opus
+//! microphone packets, so the touchpad, buttons and audio share one Bluetooth
+//! capture path.
 
+pub mod audio;
 pub mod bluetooth;
 pub mod gatt;
+pub mod inspect;
 pub mod layout;
 pub mod lock;
 pub mod mouse;
+pub mod pipewire;
 pub mod report;
 pub mod touch;
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
+use crate::audio::{Session, Stats as AudioStats};
 use crate::bluetooth::{connection_handle, parse_mac, CommandSocket, MonitorSocket};
 use crate::mouse::VirtualMouse;
+use crate::pipewire::Audio;
 use crate::report::{
     connection_interval_ms, disconnection_handle, le_connection_handle, parse_report, AttAssembler,
     InputReport, HCI_MON_ACL_RX_PKT, HCI_MON_EVENT_PKT,
 };
-use crate::touch::MotionConfig;
+use crate::touch::{siri_pressed, MotionConfig, TouchPad};
 
 /// Largest HCI monitor record we accept: ACL frames are bounded by the
 /// controller's buffer size, well below this.
@@ -34,6 +41,11 @@ const MONITOR_BUFFER: usize = 65_541;
 /// How long the packet loop waits for traffic before checking for a stop
 /// request. Short enough to make shutdown prompt while idle.
 const MONITOR_POLL: Duration = Duration::from_millis(200);
+// The Siri release drain thread of the most recent release; a new release
+// joins (supersedes) the previous one, and shutdown joins the last.
+thread_local! {
+    static DRAIN: RefCell<Option<JoinHandle<()>>> = const { RefCell::new(None) };
+}
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -53,6 +65,12 @@ pub fn run(options: Options) -> Result<()> {
     let mac = parse_mac(&options.mac)?;
     let _instance = lock::acquire()?;
 
+    let (mut session, playout) = Session::new().context("create the Opus decoder")?;
+    let mut audio = Audio::spawn(playout)?;
+    if !audio.wait_ready(Duration::from_secs(5)) {
+        bail!("the PipeWire microphone source did not start");
+    }
+
     // BlueZ subscriptions and the HID feature report are prerequisites for the
     // touchpad; retried on their own thread because GATT objects and hidraw
     // nodes only appear once the remote is connected.
@@ -62,10 +80,15 @@ pub fn run(options: Options) -> Result<()> {
         Duration::from_millis(500),
     );
 
-    let mut mouse = touch::TouchPad::new(VirtualMouse::create()?, options.pointer)
+    let mut mouse = TouchPad::new(VirtualMouse::create()?, options.pointer)
         .map_err(|error| anyhow::anyhow!(error))?;
     let stop = Arc::new(AtomicBool::new(false));
     install_signal_handlers(stop.clone())?;
+
+    tracing::info!(
+        node = pipewire::NODE_NAME,
+        "Apple TV Remote Microphone created; hold Siri to speak"
+    );
 
     // A raw HCI socket is used once per connection to shorten the link
     // interval; the monitor itself only consumes packets.
@@ -92,9 +115,16 @@ pub fn run(options: Options) -> Result<()> {
         }
     };
     let mut tuned = false;
+    let mut pressed = false;
 
     let result = (|| -> Result<()> {
         while !stop.load(Ordering::Relaxed) {
+            // A dead PipeWire stream cannot be revived in this process; exit so
+            // the service supervisor restarts the daemon with a fresh stream,
+            // as the previous pw-cat design did by dying with its child.
+            if audio.shared.is_fatal() {
+                bail!("the PipeWire microphone stream failed");
+            }
             // Interpolated pointer motion is emitted between reports, so the
             // poll doubles as the interpolation tick while travel is queued
             // and relaxes to the shutdown-check interval when it is not.
@@ -122,6 +152,9 @@ pub fn run(options: Options) -> Result<()> {
                             tuned = false;
                             assembler = AttAssembler::default();
                             mouse.release();
+                            // A press that ends with the connection ends the
+                            // capture session rather than leaving it open.
+                            on_siri(false, &mut session, &mut pressed);
                         }
                         continue;
                     }
@@ -158,10 +191,24 @@ pub fn run(options: Options) -> Result<()> {
                         continue;
                     }
                     match parse_report(&report) {
-                        Some(InputReport::Buttons(buttons)) => {
-                            mouse.process(buttons, Instant::now())
+                        Some(InputReport::Buttons(report)) => {
+                            // The click and Play/Pause/Menu bits live in the
+                            // same report as the Siri bit.
+                            mouse.process(report, Instant::now());
+                            on_siri(siri_pressed(report), &mut session, &mut pressed);
                         }
-                        Some(InputReport::Touch(touch)) => mouse.process(touch, Instant::now()),
+                        Some(InputReport::Opus { sequence, payload }) => {
+                            session.push_transport(sequence, payload, Instant::now());
+                            // A full ring means speech older than the backlog
+                            // bound is still waiting for a consumer that is
+                            // gone; recording on would silently truncate.
+                            if session.stats_backlog_exceeded() {
+                                bail!("the remote audio backlog exceeds the two-minute limit");
+                            }
+                        }
+                        Some(InputReport::Touch(touch)) => {
+                            mouse.process(touch, Instant::now());
+                        }
                         None => {}
                     }
                 }
@@ -171,16 +218,80 @@ pub fn run(options: Options) -> Result<()> {
         Ok(())
     })();
 
+    // Cleanup: end any open capture session, then release held buttons and
+    // take down the microphone source. The final release drain is joined so
+    // its summary is logged before the source disappears.
+    on_siri(false, &mut session, &mut pressed);
+    DRAIN.with(|slot| {
+        if let Some(thread) = slot.borrow_mut().take() {
+            let _ = thread.join();
+        }
+    });
     mouse.release();
     gatt.stop();
+    let stats = session.stats;
+    let touch_stats = mouse.stats;
+    let link = audio.shared.link.clone();
+    audio.shutdown();
+    print_stats(stats, &link, pressed);
     tracing::info!(
-        reports = mouse.stats.reports,
-        duplicates = mouse.stats.duplicates,
-        moves = mouse.stats.moves,
-        clicks = mouse.stats.clicks,
+        reports = touch_stats.reports,
+        duplicates = touch_stats.duplicates,
+        moves = touch_stats.moves,
+        clicks = touch_stats.clicks,
         "touchpad stopped"
     );
     result
+}
+
+/// Apply a Siri button state to the capture session on the transitions.
+/// `pressed` mirrors the transport state for the summary.
+fn on_siri(down: bool, session: &mut Session, pressed: &mut bool) {
+    let Some(down) = session.siri(down) else {
+        return;
+    };
+    *pressed = down;
+    if down {
+        tracing::info!("Siri pressed: receiving audio");
+    } else {
+        // Let late Bluetooth packets and the final PipeWire buffers deliver
+        // the tail before the session is reported over. The wait runs off the
+        // capture loop, so monitor packets keep being read while it lasts.
+        let queued_ms = session.link_queued_ms();
+        let link = session.link();
+        let handle = std::thread::Builder::new()
+            .name("siri-drain".into())
+            .spawn(move || log_drain(link, queued_ms));
+        match handle {
+            Ok(thread) => DRAIN.with(|slot| {
+                if let Some(previous) = slot.borrow_mut().replace(thread) {
+                    // A new release supersedes the previous drain.
+                    let _ = previous.join();
+                }
+            }),
+            Err(error) => {
+                tracing::warn!(%error, "cannot start the Siri drain; ending the capture anyway")
+            }
+        }
+    }
+}
+
+/// Log the release drain's outcome, as the Python daemon's dictation drain did.
+fn log_drain(link: Arc<audio::Link>, queued_ms: u64) {
+    let released = Instant::now();
+    if link.wait_drained(audio::DRAIN_BOUND, audio::DRAIN_POLL) {
+        tracing::info!(
+            queued_ms,
+            wait_s = released.elapsed().as_secs_f32(),
+            "Siri audio drained"
+        );
+    } else {
+        tracing::warn!(
+            queued_ms,
+            wait_s = released.elapsed().as_secs_f32(),
+            "Siri audio did not drain; ending the capture anyway"
+        );
+    }
 }
 
 fn tune(commands: &Option<CommandSocket>, tuned: &mut bool, handle: u16, enabled: bool) {
@@ -195,6 +306,19 @@ fn tune(commands: &Option<CommandSocket>, tuned: &mut bool, handle: u16, enabled
         },
         None => tracing::debug!("no HCI command socket; interval left unchanged"),
     }
+}
+
+fn print_stats(stats: AudioStats, link: &audio::Link, pressed: bool) {
+    tracing::info!(
+        frames = stats.frames,
+        errors = stats.errors,
+        sequence_skips = stats.sequence_skips,
+        concealed = stats.concealed,
+        underruns = link.underruns(),
+        peak = stats.peak,
+        pressed,
+        "microphone stopped"
+    );
 }
 
 fn install_signal_handlers(stop: Arc<AtomicBool>) -> Result<()> {

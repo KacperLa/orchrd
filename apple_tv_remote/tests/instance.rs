@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use apple_tv_remote::lock;
 
-/// Two daemons must not share one uinput device, and the guard must hand the
-/// lock back when the holder exits.
+/// Two daemons must not share one uinput device and microphone node, and the
+/// guard must hand the lock back when the holder exits.
 #[test]
 fn a_second_instance_is_rejected_until_the_first_releases() {
     let directory = tempfile::tempdir().expect("temp dir");

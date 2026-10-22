@@ -1,9 +1,9 @@
 //! Bluetooth LE framing and A1513 input report parsing.
 //!
-//! The remote multiplexes its touchpad and button reports over the HID
-//! notification characteristic. The HCI monitor delivers them as HCI ACL
-//! fragments of an ATT notification, so they are reassembled and unwrapped in
-//! stages.
+//! The remote multiplexes three kinds of input reports over its HID
+//! notification characteristic: touchpad/button reports, the Siri button and
+//! Opus microphone packets. The HCI monitor delivers them as HCI ACL fragments
+//! of an ATT notification, so they are reassembled and unwrapped in stages.
 
 /// Reports are a few dozen bytes; anything larger is not from this device.
 pub const MAX_REPORT: usize = 512;
@@ -29,7 +29,10 @@ const ATT_REPORT_HANDLE: [u8; 2] = [0x23, 0x00];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputReport<'a> {
-    /// Two byte button report carrying the click and Play/Pause/Menu bits.
+    /// Encoded microphone audio: sequence counter and Opus payload.
+    Opus { sequence: u16, payload: &'a [u8] },
+    /// Two byte button report; bit 0x10 is Siri and the click, Play/Pause and
+    /// Menu bits are read by the touchpad.
     Buttons(&'a [u8]),
     /// Multiplexed touchpad/button input report.
     Touch(&'a [u8]),
@@ -48,6 +51,21 @@ pub fn parse_report(report: &[u8]) -> Option<InputReport<'_>> {
     let report = report.strip_prefix(&[0xFC]).unwrap_or(report);
     if report.len() == 2 {
         return Some(InputReport::Buttons(report));
+    }
+    // Gen 1 Opus: report id, buttons, two status bytes, u16 sequence, length,
+    // then the payload.
+    if report.first() == Some(&0x10) {
+        if report.len() < 8 {
+            return None;
+        }
+        let length = report[6] as usize;
+        if length == 0 || report.len() < 7 + length {
+            return None;
+        }
+        return Some(InputReport::Opus {
+            sequence: u16::from_le_bytes([report[4], report[5]]),
+            payload: &report[7..7 + length],
+        });
     }
     // Touch and button/IMU reports carry a small report id.
     if report.len() >= 2 && report[0] & !0x07 == 0 {

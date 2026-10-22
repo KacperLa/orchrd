@@ -1,9 +1,10 @@
 //! Single-instance guard.
 //!
 //! The systemd unit already prevents a second daemon, but a manually started
-//! one would publish a duplicate uinput device, doubling every input event.
-//! The guard is an `flock` on a per-user file in the runtime directory, so it
-//! disappears with the session and never blocks a different user.
+//! one would publish a duplicate uinput device and a second microphone node,
+//! doubling every input event. The guard is an `flock` on a per-user file in
+//! the runtime directory, so it disappears with the session and never blocks a
+//! different user.
 
 use std::fs::{File, OpenOptions};
 use std::io;

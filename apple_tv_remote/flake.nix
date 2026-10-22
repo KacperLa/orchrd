@@ -1,5 +1,5 @@
 {
-  description = "Apple TV Siri Remote Bluetooth touchpad and buttons for NixOS";
+  description = "Apple TV Siri Remote Bluetooth touchpad and microphone services for NixOS";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -13,6 +13,17 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
+      ];
+      # Bindgen generates the PipeWire bindings and needs libclang; the
+      # audiopus_sys build script finds libopus through pkg-config.
+      nativeBuildInputs = pkgs: [
+        pkgs.pkg-config
+        pkgs.llvmPackages.clang
+        pkgs.llvmPackages.libclang
+      ];
+      buildInputs = pkgs: [
+        pkgs.libopus
+        pkgs.pipewire
       ];
       source = lib.cleanSourceWith {
         src = ./.;
@@ -37,8 +48,22 @@
           version = "0.2.0";
           src = source;
           cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = nativeBuildInputs pkgs;
+          buildInputs = buildInputs pkgs;
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          # The PipeWire session test starts its own server, which the sandbox
+          # cannot do; it runs from `nix develop` instead. `--skip` matches test
+          # function names, not the test binary or file name.
+          cargoTestFlags = [
+            "--lib"
+            "--bins"
+            "--tests"
+            "--"
+            "--skip"
+            "microphone_source_is_published_and_consumed"
+          ];
           meta = {
-            description = "Apple TV Siri Remote touchpad and button daemon";
+            description = "Apple TV Siri Remote touchpad and Opus microphone daemon";
             license = lib.licenses.mit;
             platforms = lib.platforms.linux;
             mainProgram = "apple-tv-remote";
@@ -61,15 +86,25 @@
             module-evaluation = import ./nix/module-checks.nix { inherit pkgs remote; };
           };
           devShells.default = pkgs.mkShell {
-            packages = [
+            # Everything needed to build, test and run the daemon, including a
+            # private PipeWire session for the integration test.
+            packages = (nativeBuildInputs pkgs) ++ [
               pkgs.cargo
               pkgs.rustc
               pkgs.rustfmt
               pkgs.clippy
+              pkgs.cmake
+              pkgs.pipewire
+              pkgs.wireplumber
+              pkgs.dbus
               pkgs.bluez
             ];
+            buildInputs = buildInputs pkgs;
+            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+            PKG_CONFIG_PATH = lib.makeSearchPathOutput "dev" "lib/pkgconfig" (buildInputs pkgs);
             shellHook = ''
-              echo "Apple TV remote: 'cargo test' runs the unit and integration tests."
+              echo "Apple TV remote: 'cargo test' runs the unit tests;"
+              echo "  'dbus-run-session -- cargo test --test pipewire_session' runs the audio integration test."
             '';
           };
         };

@@ -1,10 +1,11 @@
-//! Fixtures shared by the integration tests: the shipped pad geometry and the
-//! recording touchpad harness. Every test binary compiles this module, so items
-//! a given binary does not use are allowed to be dead.
+//! Fixtures shared by the integration tests: the shipped pad geometry, an Opus
+//! tone encoder, and the recording touchpad harness. Every test binary compiles
+//! this module, so items a given binary does not use are allowed to be dead.
 #![allow(dead_code)]
 
 use std::time::{Duration, Instant};
 
+use apple_tv_remote::audio::FRAME_SAMPLES;
 use apple_tv_remote::layout::{
     ZoneConfig, DEFAULT_CORNER_MM, DEFAULT_EDGE_MM, DEFAULT_SCROLL_STEP_MM, PAD_SIZE_MM,
 };
@@ -51,6 +52,34 @@ pub fn inside_corner(mm: f64) -> (i32, i32) {
         CONFIG.x_max - (mm * x_per_mm()).round() as i32,
         CONFIG.y_max - (mm * y_per_mm()).round() as i32,
     )
+}
+
+/// A 440 Hz tone as 20 ms Opus frames with a continuous phase, so the frames
+/// encode one signal.
+pub fn tone_packets(frames: usize) -> Vec<Vec<u8>> {
+    let encoder = audiopus::coder::Encoder::new(
+        audiopus::SampleRate::Hz16000,
+        audiopus::Channels::Mono,
+        audiopus::Application::Voip,
+    )
+    .expect("encoder");
+    let mut packets = Vec::with_capacity(frames);
+    for frame in 0..frames {
+        let mut pcm = [0i16; FRAME_SAMPLES];
+        for (index, sample) in pcm.iter_mut().enumerate() {
+            let t = (frame * FRAME_SAMPLES + index) as f32 / 16_000.0;
+            *sample = (f32::sin(std::f32::consts::TAU * 440.0 * t) * 8000.0) as i16;
+        }
+        let mut packet = [0u8; 512];
+        let len = encoder.encode(&pcm, &mut packet).expect("encode");
+        packets.push(packet[..len].to_vec());
+    }
+    packets
+}
+
+/// One frame of the same tone.
+pub fn tone_packet() -> Vec<u8> {
+    tone_packets(1).pop().expect("one packet")
 }
 
 /// Builds A1513 touch reports with a hand-advanced device clock.

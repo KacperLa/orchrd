@@ -32,7 +32,7 @@ visible terminal text, so a truncated response can be missed.
   purpose is unavailable, Orchrd asks you to check the terminal before approving.
 - Cancel agent work, request a readout, and repeat the last spoken response.
 - Inspect routing, extraction, delivery, and speech in a native GTK activity window.
-- Use your desktop microphone.
+- Use your desktop microphone or an optional Apple TV remote.
 
 Start coding agents normally inside Herdr. Orchrd discovers existing agents and
 leaves their models, sessions, and terminal processes under their own control.
@@ -393,10 +393,18 @@ separately. Disabling its worker does not remove Pocket TTS from the package.
 ## Optional Apple TV remote
 
 The remote has its own flake under [`apple_tv_remote/`](apple_tv_remote/). It is
-a standalone Rust daemon that provides a Bluetooth touchpad and buttons through
-uinput, and it is intended to move to its own repository. One process replaces
-the previous Python mouse daemon: a single HCI monitor socket feeds the
-touchpad, the buttons and the pointer interpolation.
+a standalone Rust daemon that provides a Bluetooth touchpad through uinput and
+an Opus microphone through PipeWire, and it is intended to move to its own
+repository. One process replaces the previous Python mouse and microphone
+daemons: a single HCI monitor socket feeds the touchpad, the buttons and the
+Opus decoder, and decoded PCM goes straight into PipeWire through a wait-free
+ring buffer instead of a `pw-cat` helper process.
+
+Holding Siri captures speech into the remote's microphone source; any PipeWire
+consumer can record from it while the button is held. Releasing waits for the
+utterance tail to reach the consumer, and speech is never dropped to make room:
+a backlog older than the ring's bound stops the daemon rather than silently
+truncating a recording.
 
 Dragging the touchpad's right edge scrolls vertically, dragging its top edge
 scrolls horizontally, and a mechanical click in the top-right corner is a right
@@ -433,7 +441,8 @@ In a host module with `apple-tv-remote` in scope:
 ```
 
 Pair the remote first. The module configures Bluetooth/uinput permissions and
-creates the system service `apple-tv-remote.service`. Rebuild NixOS to apply it.
+creates the system service `apple-tv-remote.service`. It needs the selected
+user's PipeWire session. Rebuild NixOS to apply it.
 
 The scroll strips are narrow on purpose: they are measured inward from the pad's
 measured extreme, which a finger only reaches when it is rolled against the
@@ -444,13 +453,18 @@ pointer movement when the finger drifts inward.
 ### Working on the remote daemon
 
 The subproject builds without the rest of Orchrd. Its flake provides a
-development shell with the Rust toolchain:
+development shell with the Rust toolchain, PipeWire headers, libopus and a
+private audio session for integration tests:
 
 ```bash
 cd apple_tv_remote
 nix develop
 cargo test
+dbus-run-session -- cargo test --test pipewire_session
 ```
+
+The PipeWire integration test starts its own `pipewire` and `wireplumber` in a
+temporary runtime directory, so it does not disturb your desktop session.
 
 ## Diagnostics
 
@@ -472,7 +486,7 @@ performs the same checks using its service environment at startup.
 | A remote is missing | Run `herdr machine status --json` and its machine-specific `agent list`; check service SSH access |
 | A question is missing | Inspect detection/extraction activity, allow for model latency, then try `orchrdctl rescan` |
 | A question is read-only | Its controls could not be grounded; answer in the terminal |
-| Microphone returns no audio | Check the active PipeWire input |
+| Microphone returns no audio | Check the active PipeWire input, or the `apple-tv-remote` service |
 | Configuration fails after upgrading | Remove obsolete options listed below and run `doctor` with the service credentials |
 
 The activity window shows extraction, routing, delivery, and speech events, with

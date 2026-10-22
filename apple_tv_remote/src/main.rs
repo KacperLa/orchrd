@@ -10,7 +10,7 @@ use apple_tv_remote::touch::MotionConfig;
 #[derive(Parser, Debug)]
 #[command(
     name = "apple-tv-remote",
-    about = "Apple TV Siri Remote touchpad and buttons",
+    about = "Apple TV Siri Remote touchpad, buttons and Opus microphone",
     // Negative numbers reach validate() so it can name the offending knob,
     // instead of clap rejecting them as unknown flags.
     allow_negative_numbers = true
@@ -70,9 +70,13 @@ struct Args {
     /// Override the automatically detected hidraw device.
     #[arg(long, value_name = "PATH")]
     hidraw: Option<PathBuf>,
+    /// Print decoder statistics for a captured btsnoop trace and exit.
+    #[arg(long, value_name = "FILE")]
+    inspect_capture: Option<PathBuf>,
 }
 
 impl Args {
+    /// Each pair collapses to the last flag given; absent means enabled.
     fn tune_link(&self) -> bool {
         self.tune_link && !self.no_tune_link
     }
@@ -86,6 +90,10 @@ fn main() -> Result<()> {
         )
         .init();
     let args = Args::parse();
+    if let Some(path) = args.inspect_capture.as_deref() {
+        apple_tv_remote::inspect::inspect_capture(path)?;
+        return Ok(());
+    }
     validate(&args)?;
     let options = apple_tv_remote::Options {
         mac: args.mac.clone(),
@@ -161,11 +169,12 @@ mod tests {
     }
 
     #[test]
-    fn boolean_flags_accept_bare_valued_and_negated_forms() {
+    fn the_tune_link_flag_accepts_bare_valued_and_negated_forms() {
         assert!(parse(&[]).tune_link());
         assert!(parse(&["--tune-link"]).tune_link());
         assert!(!parse(&["--tune-link", "false"]).tune_link());
         assert!(!parse(&["--no-tune-link"]).tune_link());
+        assert!(!parse(&["--tune-link", "--no-tune-link"]).tune_link());
         assert!(parse(&["--no-tune-link", "--tune-link"]).tune_link());
     }
 

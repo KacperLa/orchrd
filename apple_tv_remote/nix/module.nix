@@ -13,6 +13,7 @@ let
   cfg = config.services.apple-tv-remote;
   remote = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
   account = config.users.users.${cfg.user};
+  runtimeDir = "/run/user/${toString account.uid}";
   macArgument = lib.escapeShellArgs [
     "--mac"
     cfg.macAddress
@@ -27,15 +28,20 @@ let
     "--pointer-speed"
     (toString cfg.pointerSpeed)
   ];
+  path = [
+    pkgs.bluez
+    pkgs.pipewire
+    pkgs.wireplumber
+  ];
 in
 {
   options.services.apple-tv-remote = {
-    enable = lib.mkEnableOption "Apple TV remote touchpad and button input";
+    enable = lib.mkEnableOption "Apple TV remote touchpad and microphone input";
     user = lib.mkOption {
       type = lib.types.str;
       default = "";
       example = "alice";
-      description = "Existing desktop user the daemon's uinput device belongs to";
+      description = "Existing desktop user with an explicitly assigned numeric UID";
     };
     macAddress = lib.mkOption {
       type = lib.types.strMatching "([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}";
@@ -84,8 +90,9 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = builtins.hasAttr cfg.user config.users.users;
-        message = "services.apple-tv-remote.user must name an existing user.";
+        assertion =
+          builtins.hasAttr cfg.user config.users.users && config.users.users.${cfg.user}.uid != null;
+        message = "services.apple-tv-remote.user must name an existing user with users.users.<name>.uid set.";
       }
       {
         assertion = cfg.cornerMm >= cfg.edgeMm;
@@ -98,12 +105,22 @@ in
       SUBSYSTEM=="hidraw", KERNELS=="0005:004C:026D.*", OWNER="${cfg.user}", MODE="0600"
     '';
     systemd.services.apple-tv-remote = {
-      description = "Apple TV remote touchpad and buttons";
+      description = "Apple TV remote touchpad, buttons and microphone";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "bluetooth.service" ];
-      after = [ "bluetooth.service" ];
+      wants = [
+        "bluetooth.service"
+        "pipewire.service"
+      ];
+      after = [
+        "bluetooth.service"
+        "graphical-session.target"
+      ];
       unitConfig.StartLimitIntervalSec = 0;
-      environment.RUST_LOG = "apple_tv_remote=info";
+      inherit path;
+      environment = {
+        XDG_RUNTIME_DIR = runtimeDir;
+        RUST_LOG = "apple_tv_remote=info";
+      };
       serviceConfig = {
         User = cfg.user;
         Group = account.group;
@@ -112,6 +129,7 @@ in
         NoNewPrivileges = true;
         ProtectSystem = "strict";
         ProtectHome = "read-only";
+        ReadWritePaths = [ "-${runtimeDir}" ];
         TimeoutStopSec = 15;
         SupplementaryGroups = [ "uinput" ];
         # A monitor socket needs CAP_NET_RAW; the LE connection update is an

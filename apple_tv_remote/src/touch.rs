@@ -12,6 +12,8 @@ use crate::layout::{Interpolator, Region, TouchZones, ZoneConfig, PAD_SIZE_MM};
 const BUTTON_PLAY: u8 = 0x08;
 const BUTTON_MENU: u8 = 0x20;
 const BUTTON_CLICK: u8 = 0x80;
+/// Siri is reported in the two byte button report.
+const SIRI_BUTTON: u8 = 0x10;
 
 /// Pad X spans 26180/16 raw units, Y spans 106*16 raw units.
 pub const X_RANGE: f64 = 26180.0 / 16.0;
@@ -492,4 +494,9 @@ impl<S: InputSink> TouchPad<S> {
             self.button_down = false;
         }
     }
+}
+
+/// Whether a two byte button report has the Siri button held.
+pub fn siri_pressed(report: &[u8]) -> bool {
+    report.len() == 2 && report[1] & SIRI_BUTTON != 0
 }

@@ -49,6 +49,6 @@ assert
 assert builtins.elem "uinput" service.serviceConfig.SupplementaryGroups;
 assert pkgs.lib.hasInfix "--edge-mm 2 --corner-mm 4" service.serviceConfig.ExecStart;
 assert pkgs.lib.hasInfix "--mac AA:BB:CC:DD:EE:FF" service.serviceConfig.ExecStart;
-assert service.environment.RUST_LOG == "apple_tv_remote=info";
+assert service.environment.XDG_RUNTIME_DIR == "/run/user/1234";
 assert (builtins.head enabled.assertions).assertion;
 pkgs.runCommand "apple-tv-remote-module-evaluation" { } "touch $out"
