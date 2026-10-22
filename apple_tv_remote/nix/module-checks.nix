@@ -41,9 +41,14 @@ let
 in
 assert !(disabled.systemd.services ? apple-tv-remote);
 assert service.serviceConfig.User == "alice";
-assert service.serviceConfig.AmbientCapabilities == [ "CAP_NET_RAW" ];
+assert
+  service.serviceConfig.AmbientCapabilities == [
+    "CAP_NET_RAW"
+    "CAP_NET_ADMIN"
+  ];
+assert builtins.elem "uinput" service.serviceConfig.SupplementaryGroups;
+assert pkgs.lib.hasInfix "--edge-mm 2 --corner-mm 4" service.serviceConfig.ExecStart;
 assert pkgs.lib.hasInfix "--mac AA:BB:CC:DD:EE:FF" service.serviceConfig.ExecStart;
-assert pkgs.lib.hasInfix "OWNER=\"alice\"" enabled.services.udev.extraRules;
-assert enabled.hardware.bluetooth.enable;
+assert service.environment.RUST_LOG == "apple_tv_remote=info";
 assert (builtins.head enabled.assertions).assertion;
 pkgs.runCommand "apple-tv-remote-module-evaluation" { } "touch $out"

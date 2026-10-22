@@ -1,5 +1,5 @@
 {
-  description = "Apple TV Siri Remote Bluetooth connection setup for NixOS";
+  description = "Apple TV Siri Remote Bluetooth touchpad and buttons for NixOS";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -34,11 +34,11 @@
         pkgs:
         pkgs.rustPlatform.buildRustPackage {
           pname = "apple-tv-remote";
-          version = "0.1.0";
+          version = "0.2.0";
           src = source;
           cargoLock.lockFile = ./Cargo.lock;
           meta = {
-            description = "Apple TV Siri Remote Bluetooth connection setup daemon";
+            description = "Apple TV Siri Remote touchpad and button daemon";
             license = lib.licenses.mit;
             platforms = lib.platforms.linux;
             mainProgram = "apple-tv-remote";
@@ -69,7 +69,7 @@
               pkgs.bluez
             ];
             shellHook = ''
-              echo "Apple TV remote: 'cargo test' runs the unit tests."
+              echo "Apple TV remote: 'cargo test' runs the unit and integration tests."
             '';
           };
         };

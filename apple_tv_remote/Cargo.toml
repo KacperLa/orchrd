@@ -1,10 +1,10 @@
 [package]
 name = "apple-tv-remote"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"
-description = "Connection setup for the Apple TV Siri Remote over Bluetooth"
+description = "Apple TV Siri Remote touchpad and button daemon"
 
 [[bin]]
 name = "apple-tv-remote"
@@ -13,9 +13,13 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
+evdev = "0.13"
 libc = "0.2"
 signal-hook = "0.3"
 tokio = { version = "1.44", features = ["rt", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zbus = { version = "5.11", default-features = false, features = ["tokio"] }
+
+[dev-dependencies]
+tempfile = "3.19"

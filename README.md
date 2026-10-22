@@ -50,7 +50,7 @@ leaves their models, sessions, and terminal processes under their own control.
   or local Pocket TTS assets.
 
 Orchrd runs as a user service. NixOS is required only for the optional Apple TV
-remote module, which handles system Bluetooth access.
+remote module, which handles system Bluetooth and uinput access.
 
 ## Setup
 
@@ -393,10 +393,18 @@ separately. Disabling its worker does not remove Pocket TTS from the package.
 ## Optional Apple TV remote
 
 The remote has its own flake under [`apple_tv_remote/`](apple_tv_remote/). It is
-a standalone Rust daemon that establishes the remote's Bluetooth connection and
-keeps its HID reports flowing, and it is intended to move to its own repository.
-It replaces the previous Python mouse and microphone daemons, which are gone;
-touchpad, button and microphone handling is not implemented yet.
+a standalone Rust daemon that provides a Bluetooth touchpad and buttons through
+uinput, and it is intended to move to its own repository. One process replaces
+the previous Python mouse daemon: a single HCI monitor socket feeds the
+touchpad, the buttons and the pointer interpolation.
+
+Dragging the touchpad's right edge scrolls vertically, dragging its top edge
+scrolls horizontally, and a mechanical click in the top-right corner is a right
+click. Pointer motion is interpolated over a few milliseconds
+(`--interpolation-ms`, default 6) and emitted at `--output-rate` ticks per
+second, so the pointer follows a smooth path instead of stepping once per
+report. The zone geometry lives in
+[`layout.rs`](apple_tv_remote/src/layout.rs).
 
 Add this separate input to your NixOS flake:
 
@@ -418,14 +426,20 @@ In a host module with `apple-tv-remote` in scope:
     enable = true;
     user = "you";
     macAddress = "AA:BB:CC:DD:EE:FF";
+    edgeMm = 2; # Scroll strip width; raise it if edge scrolling feels unreachable.
+    cornerMm = 4; # Top-right right-click zone; must be at least edgeMm.
   };
 }
 ```
 
-Pair the remote first. The module enables Bluetooth and creates the system
-service `apple-tv-remote.service`, which asks BlueZ to reconnect whenever the
-remote drops its idle connection and re-enables its input reports. Rebuild
-NixOS to apply it.
+Pair the remote first. The module configures Bluetooth/uinput permissions and
+creates the system service `apple-tv-remote.service`. Rebuild NixOS to apply it.
+
+The scroll strips are narrow on purpose: they are measured inward from the pad's
+measured extreme, which a finger only reaches when it is rolled against the
+remote's own side. Contacts further in move the pointer. Once a contact starts in
+a strip it keeps scrolling for the whole touch, so a swipe does not fall back to
+pointer movement when the finger drifts inward.
 
 ### Working on the remote daemon
 
@@ -494,7 +508,7 @@ response queues are archival and are never replayed.
 ```
 
 This enters the pinned Nix shell and runs formatting, Rust tests, Clippy, GNOME
-extension tests, TTS tests, and headless GTK tests. The default tests use local
+extension tests, Apple TV remote tests, TTS tests, and headless GTK tests. The default tests use local
 fixtures and need no API credentials or running agent. Live tests are explicitly
 ignored by default.
 

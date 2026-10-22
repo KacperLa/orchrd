@@ -1,11 +1,12 @@
 //! BlueZ GATT setup for the remote's HID input report characteristic.
 //!
-//! Two things must happen before the remote streams its input reports: the
-//! HID host has to subscribe to the input report characteristic, and the
-//! remote is unlocked with a HID feature report sent through hidraw. Both are
-//! retried because GATT objects and hidraw nodes are rebuilt whenever the
+//! Two things must happen before the remote streams touch reports at its full
+//! rate: the HID host has to subscribe to the input report characteristic, and
+//! the remote is unlocked with a HID feature report sent through hidraw. Both
+//! are retried because GATT objects and hidraw nodes are rebuilt whenever the
 //! remote reconnects.
 
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -44,7 +45,8 @@ impl Gatt {
 
     /// Ask BlueZ to connect when it is not already connected, then subscribe to
     /// the input report characteristic and unlock the remote's report rate.
-    pub async fn prepare(&self, mac: &str) -> Result<()> {
+    /// `hidraw` overrides device discovery for the unlock report.
+    pub async fn prepare(&self, mac: &str, hidraw: Option<&Path>) -> Result<()> {
         let path = Self::device_path(mac);
         let device = zbus::Proxy::new(&self.connection, BLUEZ, path.as_str(), DEVICE_INTERFACE)
             .await
@@ -66,7 +68,10 @@ impl Gatt {
             tracing::debug!(%error, "StartNotify ignored");
         }
 
-        let device_path = find_hidraw(mac)?;
+        let device_path = match hidraw {
+            Some(path) => path.to_path_buf(),
+            None => find_hidraw(mac)?,
+        };
         unlock_reports(&device_path)?;
         tracing::info!(path = %device_path.display(), "remote HID input reports enabled");
         Ok(())
@@ -163,7 +168,11 @@ impl Drop for Preparation {
 
 /// Retry GATT setup until the remote accepts it, then hold the subscription
 /// and set it up again after every reconnect.
-pub fn prepare_in_background(mac: String, interval: Duration) -> Preparation {
+pub fn prepare_in_background(
+    mac: String,
+    hidraw: Option<PathBuf>,
+    interval: Duration,
+) -> Preparation {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
@@ -196,7 +205,7 @@ pub fn prepare_in_background(mac: String, interval: Duration) -> Preparation {
                             }
                         },
                     };
-                    match connection.prepare(&mac).await {
+                    match connection.prepare(&mac, hidraw.as_deref()).await {
                         Ok(()) => {
                             // Keeping the connection alive keeps the input
                             // report subscription alive. Poll in short slices

@@ -1,4 +1,5 @@
-//! Bluetooth plumbing: the HCI monitor socket and the remote's hidraw access.
+//! Bluetooth plumbing: the HCI monitor socket, the remote's LE connection
+//! handle, link parameter tuning and hidraw access.
 
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -7,7 +8,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 
-use crate::report::{parse_monitor_header, MonitorHeader, MONITOR_HEADER_LEN};
+use crate::report::{le_connection_update_command, MonitorHeader, MONITOR_HEADER_LEN};
 
 const AF_BLUETOOTH: i32 = 31;
 const BTPROTO_HCI: i32 = 1;
@@ -17,7 +18,12 @@ const HCI_DEV_NONE: u16 = 0xFFFF;
 const APPLE_VENDOR: &str = "0000004C";
 const APPLE_REMOTE_PRODUCT: &str = "0000026D";
 
+/// `_IOR('H', 212, int)` from linux/hci_sock.h.
+const HCIGETCONNLIST: libc::c_ulong = 0x8004_48D4;
+
 const SOCKADDR_HCI_LEN: libc::socklen_t = 6;
+/// A remote's connection list is tiny; 64 entries mirror BlueZ's own buffer.
+const MAX_CONNECTIONS: usize = 64;
 
 #[repr(C)]
 struct SockAddrHci {
@@ -99,13 +105,91 @@ impl MonitorSocket {
         if len < MONITOR_HEADER_LEN {
             return Ok(None);
         }
-        let header = parse_monitor_header(&buffer[..MONITOR_HEADER_LEN])
+        let header = crate::report::parse_monitor_header(&buffer[..MONITOR_HEADER_LEN])
             .ok_or_else(|| anyhow!("short monitor record"))?;
         if header.len as usize != len - MONITOR_HEADER_LEN {
             return Ok(None);
         }
         Ok(Some(header))
     }
+
+    pub fn payload<'a>(&self, buffer: &'a [u8], header: MonitorHeader) -> &'a [u8] {
+        &buffer[MONITOR_HEADER_LEN..MONITOR_HEADER_LEN + header.len as usize]
+    }
+}
+
+/// A raw HCI socket used only to send the LE connection update command.
+pub struct CommandSocket {
+    fd: OwnedFd,
+}
+
+impl CommandSocket {
+    pub fn open(device: u16) -> Result<Self> {
+        let fd = unsafe { libc::socket(AF_BLUETOOTH, libc::SOCK_RAW, BTPROTO_HCI) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error()).context("open HCI command socket");
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let address = SockAddrHci {
+            family: AF_BLUETOOTH as libc::sa_family_t,
+            dev: device,
+            channel: 0, // HCI_CHANNEL_RAW
+        };
+        let result = unsafe {
+            libc::bind(
+                fd.as_raw_fd(),
+                (&address as *const SockAddrHci).cast(),
+                SOCKADDR_HCI_LEN,
+            )
+        };
+        if result < 0 {
+            return Err(io::Error::last_os_error()).context("bind HCI raw channel");
+        }
+        Ok(Self { fd })
+    }
+
+    /// Request a 7.5-15 ms connection interval with no peripheral latency.
+    pub fn tune_link(&self, handle: u16) -> Result<()> {
+        let command = le_connection_update_command(handle);
+        let written = unsafe {
+            libc::send(
+                self.fd.as_raw_fd(),
+                command.as_ptr().cast(),
+                command.len(),
+                0,
+            )
+        };
+        if written < 0 {
+            return Err(io::Error::last_os_error()).context("send LE connection update");
+        }
+        Ok(())
+    }
+}
+
+/// Find the connection handle of `mac` on `device`, if it is connected.
+pub fn connection_handle(device: u16, mac: &[u8; 6]) -> Result<Option<u16>> {
+    let fd = unsafe { libc::socket(AF_BLUETOOTH, libc::SOCK_RAW, BTPROTO_HCI) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error()).context("open HCI connection list socket");
+    }
+    let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    // struct hci_conn_list_req { u16 dev_id; u16 conn_num; struct hci_conn_info[]; }
+    let mut request = vec![0u8; 4 + MAX_CONNECTIONS * 16];
+    request[0..2].copy_from_slice(&device.to_le_bytes());
+    request[2..4].copy_from_slice(&(MAX_CONNECTIONS as u16).to_le_bytes());
+    let result = unsafe { libc::ioctl(fd.as_raw_fd(), HCIGETCONNLIST, request.as_mut_ptr()) };
+    if result < 0 {
+        return Err(io::Error::last_os_error()).context("HCIGETCONNLIST");
+    }
+    let count = u16::from_le_bytes([request[2], request[3]]) as usize;
+    for index in 0..count.min(MAX_CONNECTIONS) {
+        let offset = 4 + index * 16;
+        let handle = u16::from_le_bytes([request[offset], request[offset + 1]]) & 0x0FFF;
+        if request[offset + 2..offset + 8] == *mac {
+            return Ok(Some(handle));
+        }
+    }
+    Ok(None)
 }
 
 /// Encode a colon-separated Bluetooth address in HCI order.
@@ -181,19 +265,4 @@ pub fn unlock_reports(path: &Path) -> Result<()> {
             .with_context(|| format!("HIDIOCSFEATURE on {}", path.display()));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_bluetooth_address_is_decoded_in_hci_order() {
-        assert_eq!(
-            parse_mac("28:EC:95:12:B9:E5").unwrap(),
-            [0xE5, 0xB9, 0x12, 0x95, 0xEC, 0x28]
-        );
-        assert!(parse_mac("28:EC:95:12:B9").is_err());
-        assert!(parse_mac("28:EC:95:12:B9:GG").is_err());
-    }
 }
