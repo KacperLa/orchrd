@@ -102,7 +102,7 @@ fn feed_realtime(decoder: &mut DecoderSession, frames: u64) {
     }
 }
 
-/// Record from the remote microphone the way any consumer would.
+/// Record from the remote microphone like Orchrd's `pw-record` consumer does.
 struct Recorder {
     child: Child,
     path: PathBuf,
@@ -140,12 +140,12 @@ impl Recorder {
 
 /// One test owns the environment mutation, so tests do not race each other.
 #[test]
-fn microphone_source_is_published_and_consumed() {
+fn microphone_source_is_published_selected_and_consumed() {
     let Some(_session) = PrivateSession::start() else {
         return;
     };
     let (mut decoder, playout) = DecoderSession::new().expect("decoder");
-    let mut audio = Audio::spawn(playout).expect("spawn PipeWire");
+    let audio = Audio::spawn(playout).expect("spawn PipeWire");
 
     assert!(
         audio.wait_ready(Duration::from_secs(5)),
@@ -153,8 +153,19 @@ fn microphone_source_is_published_and_consumed() {
     );
     assert!(audio.shared.node_id() > 0);
 
-    // The capture flow: speech starts before the recording consumer is
-    // attached, exactly as when Siri is held while a recorder starts up.
+    // Selecting our own node must be remembered by the session.
+    audio.select_microphone().expect("queue selection");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && !audio.shared.is_microphone_default() {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        audio.shared.is_microphone_default(),
+        "WirePlumber did not adopt {NODE_NAME} as the default input"
+    );
+
+    // The dictation flow: speech starts before the recording consumer is
+    // attached, exactly as when Siri is held while Orchrd spawns pw-record.
     decoder.siri(true);
     feed_realtime(&mut decoder, 15);
     let buffered_before = audio.shared.link.buffered_samples();

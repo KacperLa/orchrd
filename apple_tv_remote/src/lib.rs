@@ -7,6 +7,7 @@
 
 pub mod audio;
 pub mod bluetooth;
+pub mod dictation;
 pub mod gatt;
 pub mod inspect;
 pub mod layout;
@@ -16,17 +17,16 @@ pub mod pipewire;
 pub mod report;
 pub mod touch;
 
-use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 
 use crate::audio::{Session, Stats as AudioStats};
 use crate::bluetooth::{connection_handle, parse_mac, CommandSocket, MonitorSocket};
+use crate::dictation::Dictation;
 use crate::mouse::VirtualMouse;
 use crate::pipewire::Audio;
 use crate::report::{
@@ -41,11 +41,6 @@ const MONITOR_BUFFER: usize = 65_541;
 /// How long the packet loop waits for traffic before checking for a stop
 /// request. Short enough to make shutdown prompt while idle.
 const MONITOR_POLL: Duration = Duration::from_millis(200);
-// The Siri release drain thread of the most recent release; a new release
-// joins (supersedes) the previous one, and shutdown joins the last.
-thread_local! {
-    static DRAIN: RefCell<Option<JoinHandle<()>>> = const { RefCell::new(None) };
-}
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -56,6 +51,7 @@ pub struct Options {
     /// How long the packet loop may wait while interpolated motion is in
     /// flight; also the pointer output rate's period.
     pub tick_interval: Duration,
+    pub orchrd: bool,
     pub tune_link: bool,
     pub device: u16,
 }
@@ -66,10 +62,11 @@ pub fn run(options: Options) -> Result<()> {
     let _instance = lock::acquire()?;
 
     let (mut session, playout) = Session::new().context("create the Opus decoder")?;
-    let mut audio = Audio::spawn(playout)?;
+    let audio = Audio::spawn(playout)?;
     if !audio.wait_ready(Duration::from_secs(5)) {
         bail!("the PipeWire microphone source did not start");
     }
+    let link = audio.shared.link.clone();
 
     // BlueZ subscriptions and the HID feature report are prerequisites for the
     // touchpad; retried on their own thread because GATT objects and hidraw
@@ -89,6 +86,18 @@ pub fn run(options: Options) -> Result<()> {
         node = pipewire::NODE_NAME,
         "Apple TV Remote Microphone created; hold Siri to speak"
     );
+
+    let mut dictation = if options.orchrd {
+        match Dictation::spawn(audio.clone_handle()) {
+            Ok(dictation) => Some(dictation),
+            Err(error) => {
+                tracing::warn!(%error, "dictation control disabled");
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     // A raw HCI socket is used once per connection to shorten the link
     // interval; the monitor itself only consumes packets.
@@ -152,9 +161,9 @@ pub fn run(options: Options) -> Result<()> {
                             tuned = false;
                             assembler = AttAssembler::default();
                             mouse.release();
-                            // A press that ends with the connection ends the
-                            // capture session rather than leaving it open.
-                            on_siri(false, &mut session, &mut pressed);
+                            // A press that ends with the connection is
+                            // submitted rather than left recording forever.
+                            on_siri(false, &mut session, dictation.as_ref(), &mut pressed);
                         }
                         continue;
                     }
@@ -195,7 +204,12 @@ pub fn run(options: Options) -> Result<()> {
                             // The click and Play/Pause/Menu bits live in the
                             // same report as the Siri bit.
                             mouse.process(report, Instant::now());
-                            on_siri(siri_pressed(report), &mut session, &mut pressed);
+                            on_siri(
+                                siri_pressed(report),
+                                &mut session,
+                                dictation.as_ref(),
+                                &mut pressed,
+                            );
                         }
                         Some(InputReport::Opus { sequence, payload }) => {
                             session.push_transport(sequence, payload, Instant::now());
@@ -218,20 +232,17 @@ pub fn run(options: Options) -> Result<()> {
         Ok(())
     })();
 
-    // Cleanup: end any open capture session, then release held buttons and
-    // take down the microphone source. The final release drain is joined so
-    // its summary is logged before the source disappears.
-    on_siri(false, &mut session, &mut pressed);
-    DRAIN.with(|slot| {
-        if let Some(thread) = slot.borrow_mut().take() {
-            let _ = thread.join();
-        }
-    });
+    // Cleanup: cancel any recording, then release held buttons. The actor is
+    // joined first so the previous input is restored before the microphone
+    // source goes away.
+    on_siri(false, &mut session, dictation.as_ref(), &mut pressed);
+    if let Some(dictation) = dictation.as_mut() {
+        dictation.shutdown();
+    }
     mouse.release();
     gatt.stop();
     let stats = session.stats;
     let touch_stats = mouse.stats;
-    let link = audio.shared.link.clone();
     audio.shutdown();
     print_stats(stats, &link, pressed);
     tracing::info!(
@@ -244,53 +255,22 @@ pub fn run(options: Options) -> Result<()> {
     result
 }
 
-/// Apply a Siri button state to the capture session on the transitions.
-/// `pressed` mirrors the transport state for the summary.
-fn on_siri(down: bool, session: &mut Session, pressed: &mut bool) {
+/// Apply a Siri button state, starting or finishing the dictation session on
+/// the transitions. `pressed` mirrors the transport state for the summary.
+fn on_siri(down: bool, session: &mut Session, dictation: Option<&Dictation>, pressed: &mut bool) {
     let Some(down) = session.siri(down) else {
         return;
     };
     *pressed = down;
+    let Some(dictation) = dictation else {
+        return;
+    };
     if down {
         tracing::info!("Siri pressed: receiving audio");
+        dictation.begin();
     } else {
-        // Let late Bluetooth packets and the final PipeWire buffers deliver
-        // the tail before the session is reported over. The wait runs off the
-        // capture loop, so monitor packets keep being read while it lasts.
-        let queued_ms = session.link_queued_ms();
-        let link = session.link();
-        let handle = std::thread::Builder::new()
-            .name("siri-drain".into())
-            .spawn(move || log_drain(link, queued_ms));
-        match handle {
-            Ok(thread) => DRAIN.with(|slot| {
-                if let Some(previous) = slot.borrow_mut().replace(thread) {
-                    // A new release supersedes the previous drain.
-                    let _ = previous.join();
-                }
-            }),
-            Err(error) => {
-                tracing::warn!(%error, "cannot start the Siri drain; ending the capture anyway")
-            }
-        }
-    }
-}
-
-/// Log the release drain's outcome, as the Python daemon's dictation drain did.
-fn log_drain(link: Arc<audio::Link>, queued_ms: u64) {
-    let released = Instant::now();
-    if link.wait_drained(audio::DRAIN_BOUND, audio::DRAIN_POLL) {
-        tracing::info!(
-            queued_ms,
-            wait_s = released.elapsed().as_secs_f32(),
-            "Siri audio drained"
-        );
-    } else {
-        tracing::warn!(
-            queued_ms,
-            wait_s = released.elapsed().as_secs_f32(),
-            "Siri audio did not drain; ending the capture anyway"
-        );
+        tracing::info!(frames = session.stats.frames, "Siri released");
+        dictation.submit();
     }
 }
 

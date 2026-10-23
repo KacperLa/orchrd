@@ -28,6 +28,9 @@ let
     "--pointer-speed"
     (toString cfg.pointerSpeed)
   ];
+  # Orchrd is optional: the daemon still publishes the microphone source and
+  # provides the touchpad without it.
+  orchrdArgument = if cfg.orchrd then "--orchrd true" else "--orchrd false";
   path = [
     pkgs.bluez
     pkgs.pipewire
@@ -77,6 +80,15 @@ in
       default = 3.0;
       description = "Base pointer travel in pixels per millimetre of finger motion";
     };
+    orchrd = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Send Siri push-to-talk speech to Orchrd. The daemon drives the Orchrd
+        session service over the selected user's session bus, so nothing needs
+        to be on the unit's path.
+      '';
+    };
     tuneLink = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -119,6 +131,7 @@ in
       inherit path;
       environment = {
         XDG_RUNTIME_DIR = runtimeDir;
+        DBUS_SESSION_BUS_ADDRESS = "unix:path=${runtimeDir}/bus";
         RUST_LOG = "apple_tv_remote=info";
       };
       serviceConfig = {
@@ -146,6 +159,7 @@ in
           ${remote}/bin/apple-tv-remote \
             ${macArgument} \
             ${pointerArguments} \
+            ${orchrdArgument} \
             --tune-link ${if cfg.tuneLink then "true" else "false"}
         '';
       };

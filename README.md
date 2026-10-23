@@ -400,11 +400,12 @@ daemons: a single HCI monitor socket feeds the touchpad, the buttons and the
 Opus decoder, and decoded PCM goes straight into PipeWire through a wait-free
 ring buffer instead of a `pw-cat` helper process.
 
-Holding Siri captures speech into the remote's microphone source; any PipeWire
+Holding Siri selects the remote microphone and starts recording; any PipeWire
 consumer can record from it while the button is held. Releasing waits for the
-utterance tail to reach the consumer, and speech is never dropped to make room:
-a backlog older than the ring's bound stops the daemon rather than silently
-truncating a recording.
+utterance tail to reach the consumer, submits it to Orchrd, and restores the
+previous input unless you changed sources while recording. Speech is never
+dropped to make room: a backlog older than the ring's bound stops the daemon
+rather than silently truncating a recording.
 
 Dragging the touchpad's right edge scrolls vertically, dragging its top edge
 scrolls horizontally, and a mechanical click in the top-right corner is a right
@@ -442,7 +443,8 @@ In a host module with `apple-tv-remote` in scope:
 
 Pair the remote first. The module configures Bluetooth/uinput permissions and
 creates the system service `apple-tv-remote.service`. It needs the selected
-user's PipeWire session. Rebuild NixOS to apply it.
+user's PipeWire session and session bus; Orchrd itself is reached over D-Bus,
+so nothing has to be on the unit's path. Rebuild NixOS to apply it.
 
 The scroll strips are narrow on purpose: they are measured inward from the pad's
 measured extreme, which a finger only reaches when it is rolled against the

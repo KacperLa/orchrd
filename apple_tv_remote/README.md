@@ -4,10 +4,11 @@ A Rust daemon that turns a first-generation Apple TV Siri Remote (A1513) into a
 Bluetooth touchpad, button source and Opus microphone on Linux. The touchpad is
 published through uinput, and the microphone as a PipeWire source.
 
-This subproject is standalone: it has its own flake, its own lock file and no
-dependency on the rest of the repository. It is intended to move to its own
-repository. Holding Siri captures microphone audio into the published source;
-any PipeWire consumer can record from it.
+This subproject is independent of the rest of Orchrd: it has its own flake, its
+own lock file and no dependency on the Orchrd crate. It is intended to move to
+its own repository. Orchrd integration (selecting the remote microphone and
+driving a recording while Siri is held) is optional and can be disabled with
+`--orchrd false`.
 
 ## Architecture
 
@@ -34,9 +35,10 @@ One process replaces the previous pair of Python daemons:
 | `touch.rs` | A1513 report decoding and the pointer/scroll/click state machine |
 | `report.rs` | ATT reassembly, HID report parsing, HCI event parsing |
 | `audio.rs` | Opus decode, jitter buffering and playout |
-| `pipewire.rs` | The published microphone source |
+| `pipewire.rs` | The published microphone source and default-input selection |
 | `bluetooth.rs` | HCI monitor socket, connection handle lookup, hidraw access |
 | `gatt.rs` | BlueZ notification subscription and report-rate unlock |
+| `dictation.rs` | Siri push-to-talk and Orchrd recording control |
 | `mouse.rs` | uinput sink for the touch state machine |
 | `inspect.rs` | Offline decoding of a btsnoop capture |
 
@@ -58,9 +60,10 @@ into the next one.
 
 Holding Siri starts capturing microphone audio into the published source.
 Releasing waits for late Bluetooth packets and the final PipeWire buffers to
-deliver the tail — up to ten seconds — before the capture session is over.
-Decoded speech is never dropped to make room: a consumer that attaches late
-hears the whole utterance, and speech older than the two-minute ring bound
+deliver the tail, submits the recording to Orchrd, and restores the previous
+default input unless the user changed it while dictating — all off the capture
+loop. A consumer that attaches late hears the whole utterance: decoded speech
+is never dropped to make room, and speech older than the two-minute ring bound
 stops the daemon instead of silently truncating a recording.
 
 Only one daemon may run per user: a second instance would publish a duplicate
@@ -118,4 +121,5 @@ inputs.apple-tv-remote = {
 Pair the remote first. The module creates the system service
 `apple-tv-remote.service`, which runs as the selected user with `CAP_NET_RAW`
 (monitor socket) and `CAP_NET_ADMIN` (LE connection update). It needs the
-selected user's PipeWire session.
+selected user's PipeWire session and session bus; Orchrd itself is reached over
+D-Bus, so nothing has to be on the unit's path.

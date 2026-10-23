@@ -60,7 +60,7 @@
             "--tests"
             "--"
             "--skip"
-            "microphone_source_is_published_and_consumed"
+            "microphone_source_is_published_selected_and_consumed"
           ];
           meta = {
             description = "Apple TV Siri Remote touchpad and Opus microphone daemon";

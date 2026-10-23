@@ -54,6 +54,19 @@ struct Args {
     /// Finger travel per scroll notch in the edge strips.
     #[arg(long, default_value_t = DEFAULT_SCROLL_STEP_MM)]
     scroll_step_mm: f64,
+    /// Send Siri speech to Orchrd; a bare --orchrd means true.
+    #[arg(
+        long,
+        default_value_t = true,
+        default_missing_value = "true",
+        num_args = 0..=1,
+        value_name = "BOOL",
+        overrides_with = "no_orchrd"
+    )]
+    orchrd: bool,
+    /// Disable the Orchrd integration, like --orchrd false.
+    #[arg(long, action = clap::ArgAction::SetTrue, overrides_with = "orchrd")]
+    no_orchrd: bool,
     /// Request a short Bluetooth connection interval on connect.
     #[arg(
         long,
@@ -77,6 +90,10 @@ struct Args {
 
 impl Args {
     /// Each pair collapses to the last flag given; absent means enabled.
+    fn orchrd(&self) -> bool {
+        self.orchrd && !self.no_orchrd
+    }
+
     fn tune_link(&self) -> bool {
         self.tune_link && !self.no_tune_link
     }
@@ -109,6 +126,7 @@ fn main() -> Result<()> {
             args.interpolation_ms / 1000.0,
         ),
         tick_interval: Duration::from_secs_f64(1.0 / args.output_rate),
+        orchrd: args.orchrd(),
         tune_link: args.tune_link(),
         device: args.device,
     };
@@ -169,12 +187,19 @@ mod tests {
     }
 
     #[test]
-    fn the_tune_link_flag_accepts_bare_valued_and_negated_forms() {
+    fn boolean_flags_accept_bare_valued_and_negated_forms() {
+        assert!(parse(&[]).orchrd());
+        assert!(parse(&["--orchrd"]).orchrd());
+        assert!(parse(&["--orchrd", "true"]).orchrd());
+        assert!(!parse(&["--orchrd", "false"]).orchrd());
+        assert!(!parse(&["--no-orchrd"]).orchrd());
+        assert!(!parse(&["--orchrd", "--no-orchrd"]).orchrd());
+        assert!(parse(&["--no-orchrd", "--orchrd"]).orchrd());
+
         assert!(parse(&[]).tune_link());
         assert!(parse(&["--tune-link"]).tune_link());
         assert!(!parse(&["--tune-link", "false"]).tune_link());
         assert!(!parse(&["--no-tune-link"]).tune_link());
-        assert!(!parse(&["--tune-link", "--no-tune-link"]).tune_link());
         assert!(parse(&["--no-tune-link", "--tune-link"]).tune_link());
     }
 

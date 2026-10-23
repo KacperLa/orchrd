@@ -1,11 +1,15 @@
-//! PipeWire: the published microphone source.
+//! PipeWire: the published microphone source and default-source selection.
 //!
 //! A dedicated thread owns the PipeWire main loop because PipeWire objects are
 //! not `Send`. PipeWire drives the playout cadence: each process cycle copies
 //! already-decoded PCM out of the shared ring buffer, so the daemon has no
 //! audio timer of its own.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -18,16 +22,22 @@ use crate::audio::{Link, Playout, SAMPLE_RATE};
 
 pub const NODE_NAME: &str = "apple_remote_microphone";
 pub const NODE_DESCRIPTION: &str = "Apple TV Remote Microphone";
+/// WirePlumber stores the selected default input here as JSON.
+pub const CONFIGURED_SOURCE_KEY: &str = "default.configured.audio.source";
+pub const SOURCE_KEY: &str = "default.audio.source";
+const METADATA_NAME: &str = "default";
 
-/// State shared with the transport thread.
+/// State shared with the transport and dictation threads.
 pub struct Shared {
     pub link: Arc<Link>,
-    /// Set once the source node is streaming and can be recorded from.
+    /// Set once the source node is streaming and can be selected.
     ready: AtomicBool,
     /// Set when the stream or the PipeWire server failed; the daemon exits so
     /// the service supervisor restarts it, like the previous pw-cat design.
     fatal: AtomicBool,
     node_id: AtomicU32,
+    /// Current values of the `default` metadata object.
+    properties: Mutex<HashMap<String, String>>,
 }
 
 impl Shared {
@@ -42,12 +52,58 @@ impl Shared {
     pub fn node_id(&self) -> u32 {
         self.node_id.load(Ordering::Relaxed)
     }
+
+    /// The node the session considers the default input, preferring the
+    /// running selection over the stored preference.
+    pub fn default_source(&self) -> Option<String> {
+        let properties = self.properties.lock().ok()?;
+        properties
+            .get(SOURCE_KEY)
+            .and_then(|value| json_name(value))
+            .or_else(|| {
+                properties
+                    .get(CONFIGURED_SOURCE_KEY)
+                    .and_then(|value| json_name(value))
+            })
+    }
+
+    pub fn is_microphone_default(&self) -> bool {
+        self.default_source().as_deref() == Some(NODE_NAME)
+    }
+
+    fn set_property(&self, key: &str, value: Option<&str>) {
+        if let Ok(mut properties) = self.properties.lock() {
+            match value {
+                Some(value) => {
+                    properties.insert(key.to_string(), value.to_string());
+                }
+                None => {
+                    properties.remove(key);
+                }
+            }
+        }
+    }
 }
 
-/// Handle to the PipeWire thread; dropping it stops the thread.
+/// Parse `{"name":"node"}` as written by WirePlumber.
+pub fn json_name(value: &str) -> Option<String> {
+    serde_json::from_str::<HashMap<String, String>>(value)
+        .ok()
+        .and_then(|value| value.get("name").cloned())
+}
+
+enum Command {
+    /// Select a node by name as the configured default input.
+    Select(String),
+    Stop,
+}
+
+/// Handle to the PipeWire thread. Cloning shares the thread; the last handle
+/// stops it.
+#[derive(Clone)]
 pub struct Audio {
-    stop: Arc<AtomicBool>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    commands: Sender<Command>,
+    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     pub shared: Arc<Shared>,
 }
 
@@ -58,19 +114,35 @@ impl Audio {
             ready: AtomicBool::new(false),
             fatal: AtomicBool::new(false),
             node_id: AtomicU32::new(0),
+            properties: Mutex::new(HashMap::new()),
         });
-        let stop = Arc::new(AtomicBool::new(false));
+        let (commands, queue) = mpsc::channel();
         let state = shared.clone();
-        let flag = stop.clone();
         let thread = std::thread::Builder::new()
             .name("pipewire".into())
-            .spawn(move || run(state, playout, flag))
+            .spawn(move || run(queue, state, playout))
             .context("spawn PipeWire thread")?;
         Ok(Self {
-            stop,
-            thread: Some(thread),
+            commands,
+            thread: Arc::new(Mutex::new(Some(thread))),
             shared,
         })
+    }
+
+    pub fn select(&self, name: &str) -> Result<()> {
+        self.commands
+            .send(Command::Select(name.to_string()))
+            .map_err(|_| anyhow!("PipeWire thread stopped"))
+    }
+
+    /// Handle suitable for another thread; shares this stream.
+    pub fn clone_handle(&self) -> Self {
+        self.clone()
+    }
+
+    /// Select the remote microphone as the configured default input.
+    pub fn select_microphone(&self) -> Result<()> {
+        self.select(NODE_NAME)
     }
 
     /// Wait until the source node is published and streaming. A stream or
@@ -92,10 +164,11 @@ impl Audio {
         }
     }
 
-    /// Stop the PipeWire thread.
-    pub fn shutdown(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if let Some(thread) = self.thread.take() {
+    /// Stop the PipeWire thread. Safe to call from any handle.
+    pub fn shutdown(&self) {
+        let _ = self.commands.send(Command::Stop);
+        let thread = self.thread.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(thread) = thread {
             let _ = thread.join();
         }
     }
@@ -103,25 +176,62 @@ impl Audio {
 
 impl Drop for Audio {
     fn drop(&mut self) {
-        self.shutdown();
+        // Only the final handle owns the join handle.
+        if Arc::strong_count(&self.thread) == 1 {
+            self.shutdown();
+        }
     }
 }
 
-fn run(shared: Arc<Shared>, playout: Playout, stop: Arc<AtomicBool>) {
+type DefaultMetadata = Rc<RefCell<Option<pw::metadata::Metadata>>>;
+
+fn run(commands: mpsc::Receiver<Command>, shared: Arc<Shared>, playout: Playout) {
     pw::init();
-    let mainloop = match build(&shared, playout) {
+    let metadata: DefaultMetadata = Rc::new(RefCell::new(None));
+    let mainloop = match build(&shared, playout, &metadata) {
         Ok(mainloop) => mainloop,
         Err(error) => {
             tracing::error!(%error, "PipeWire microphone source unavailable");
             return;
         }
     };
-    // The main loop stays on its thread, so shutdown is requested through a
-    // flag polled by a short timer.
     let quit = mainloop.clone();
+    let state = shared.clone();
+    let handle = metadata.clone();
+    // A selection issued before the node or metadata is ready is kept and
+    // retried, so a press during startup still selects the right input.
+    let pending: RefCell<Option<String>> = RefCell::new(None);
     let timer = mainloop.loop_().add_timer(move |_| {
-        if stop.load(Ordering::Acquire) {
-            quit.quit();
+        loop {
+            match commands.try_recv() {
+                Ok(Command::Select(name)) => *pending.borrow_mut() = Some(name),
+                Ok(Command::Stop) => {
+                    quit.quit();
+                    return;
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    quit.quit();
+                    return;
+                }
+            }
+        }
+        let pending_name = pending.borrow().clone();
+        let Some(name) = pending_name else {
+            return;
+        };
+        if !state.is_ready() {
+            return;
+        }
+        match handle.borrow().as_ref() {
+            Some(proxy) => match select_default(proxy, &name) {
+                Ok(()) => {
+                    tracing::info!(%name, "selected default input");
+                    pending.borrow_mut().take();
+                }
+                Err(error) => tracing::warn!(%error, %name, "cannot select default input"),
+            },
+            None => tracing::debug!("PipeWire default metadata is not bound yet"),
         }
     });
     let _ = timer.update_timer(
@@ -131,10 +241,63 @@ fn run(shared: Arc<Shared>, playout: Playout, stop: Arc<AtomicBool>) {
     mainloop.run();
 }
 
-fn build(shared: &Arc<Shared>, playout: Playout) -> Result<pw::main_loop::MainLoopRc> {
+fn select_default(metadata: &pw::metadata::Metadata, name: &str) -> Result<()> {
+    let value = serde_json::json!({ "name": name }).to_string();
+    metadata.set_property(
+        0,
+        CONFIGURED_SOURCE_KEY,
+        Some("Spa:String:JSON"),
+        Some(&value),
+    );
+    Ok(())
+}
+
+fn build(
+    shared: &Arc<Shared>,
+    playout: Playout,
+    metadata: &DefaultMetadata,
+) -> Result<pw::main_loop::MainLoopRc> {
     let mainloop = pw::main_loop::MainLoopRc::new(None)?;
     let context = pw::context::ContextRc::new(&mainloop, None)?;
     let core = context.connect_rc(None)?;
+    let registry = core.get_registry_rc()?;
+    // Bind WirePlumber's `default` metadata to track and change the default
+    // input; this is the object behind `pw-metadata -n default`.
+    let properties = shared.clone();
+    let slot = metadata.clone();
+    let binder = registry.clone();
+    let _registry_listener = registry
+        .add_listener_local()
+        .global(move |object| {
+            if object.type_ != pw::types::ObjectType::Metadata {
+                return;
+            }
+            if object.props.and_then(|props| props.get("metadata.name")) != Some(METADATA_NAME) {
+                return;
+            }
+            let Ok(proxy) = binder.bind::<pw::metadata::Metadata, _>(object) else {
+                tracing::warn!("cannot bind the PipeWire default metadata");
+                return;
+            };
+            let state = properties.clone();
+            let listener = proxy
+                .add_listener_local()
+                .property(move |_, key, _, value| {
+                    if let Some(key) = key {
+                        state.set_property(key, value);
+                    }
+                    0
+                })
+                .register();
+            // The listener must outlive the callback registration; the proxy
+            // lives in `slot` for the whole process.
+            std::mem::forget(listener);
+            *slot.borrow_mut() = Some(proxy);
+        })
+        .register();
+    // The listener must stay registered for the process lifetime; the
+    // registry does not own it.
+    std::mem::forget(_registry_listener);
 
     let stream = pw::stream::StreamRc::new(
         core.clone(),
@@ -168,9 +331,8 @@ fn build(shared: &Arc<Shared>, playout: Playout) -> Result<pw::main_loop::MainLo
         .state_changed(move |stream, (), old, new| {
             match new {
                 // Paused means published and driven-when-consumed: the source
-                // can be recorded from and its node id known, but playout is
-                // left to the consumer's cadence, as the Python daemon's
-                // pw-cat was.
+                // is selectable and its node id known, but playout is left to
+                // the consumer's cadence, as the Python daemon's pw-cat was.
                 pw::stream::StreamState::Paused => {
                     state.node_id.store(stream.node_id(), Ordering::Relaxed);
                     state.ready.store(true, Ordering::Release);
