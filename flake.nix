@@ -105,7 +105,8 @@
           ];
           postCheck = ''
             gjs extension/test-lifecycle.js
-            python3 -m unittest discover -s apple_tv_remote
+            # The Apple TV remote is a standalone Rust subproject with its own
+            # flake and test suite; it is not part of this package's checks.
             python3 -m unittest discover -s tts
             env -u GIO_EXTRA_MODULES -u GIO_MODULE_DIR GI_TYPELIB_PATH="${activityTypelibs}" GDK_BACKEND=x11 \
               XDG_DATA_DIRS="${pkgs.gtk4}/share" GTK_A11Y=none GIO_USE_VFS=local GTK_USE_PORTAL=0 \
@@ -182,7 +183,7 @@
         checks = {
           inherit orchrd;
           module-evaluation = import ./nix/module-checks.nix {
-            inherit self nixpkgs home-manager pkgs system;
+            inherit self home-manager pkgs;
           };
         };
         formatter = pkgs.nixfmt;
