@@ -4,4 +4,5 @@
 __pycache__/
 *.pyc
 .env
-
+/apple_tv_remote/target/
+/apple_tv_remote/result

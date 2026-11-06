@@ -33,9 +33,8 @@ exec nix develop "path:$repo_root" --command bash -euo pipefail -c '
     env -u GI_TYPELIB_PATH -u GIO_EXTRA_MODULES -u GIO_MODULE_DIR \
         gjs extension/test-lifecycle.js
 
-    echo "Running Apple TV remote tests..."
-    env -u PYTHONPATH -u PYTHONHOME \
-        python3 -m unittest discover -s apple_tv_remote
+    # The Apple TV remote daemon is a standalone Rust subproject with its own
+    # flake and test suite: cd apple_tv_remote && nix develop && cargo test.
 
     echo "Running TTS worker tests..."
     env -u PYTHONPATH -u PYTHONHOME \
